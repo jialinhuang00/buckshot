@@ -4,7 +4,7 @@
 
 # ── Workflows ──────────────────────────────────────────────────────
 # First time setup: start infra, create schema, seed data.
-setup: infra-up db-init ch-init seed
+setup: infra-up db-init ch-init
 
 # ── Infra ──────────────────────────────────────────────────────────
 infra-up:
