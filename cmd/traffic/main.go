@@ -8,7 +8,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -66,9 +65,8 @@ func main() {
 	}
 	log.Printf("loaded %d keys from DB", len(ks.all))
 
-	// atomic pointer to current keySet
-	var ptr unsafe.Pointer
-	atomic.StorePointer(&ptr, unsafe.Pointer(ks))
+	var ptr atomic.Pointer[keySet]
+	ptr.Store(ks)
 
 	// background reload
 	go func() {
@@ -79,7 +77,7 @@ func main() {
 			if next == nil {
 				continue
 			}
-			atomic.StorePointer(&ptr, unsafe.Pointer(next))
+			ptr.Store(next)
 			log.Printf("reloaded keys: %d total", len(next.all))
 		}
 	}()
@@ -96,7 +94,6 @@ func main() {
 	log.Println("traffic running continuously, Ctrl+C to stop")
 	total := 0
 	for {
-		cur := (*keySet)(atomic.LoadPointer(&ptr))
 		start := time.Now()
 		for i := 0; i < requests; i++ {
 			wg.Add(1)
@@ -105,7 +102,7 @@ func main() {
 				defer wg.Done()
 				defer func() { <-sem }()
 
-				cur := (*keySet)(atomic.LoadPointer(&ptr))
+				cur := ptr.Load()
 				var shortKey string
 				if rand.Float32() < 0.8 {
 					shortKey = cur.hot[rand.Intn(len(cur.hot))]
@@ -123,8 +120,6 @@ func main() {
 		wg.Wait()
 		total += requests
 		elapsed := time.Since(start)
-		_ = cur
 		log.Printf("batch done: %d total | %.0f req/s", total, float64(requests)/elapsed.Seconds())
 	}
 }
-
