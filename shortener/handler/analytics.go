@@ -19,11 +19,12 @@ func (h *AnalyticsHandler) Page(c *gin.Context) {
 	c.File("shortener/static/analytics.html")
 }
 
-// GET /analytics/data — returns all analytics in one payload
+// GET /analytics/data?g=30s|1m|15m|30m — returns all analytics in one payload
 func (h *AnalyticsHandler) Data(c *gin.Context) {
 	ctx := c.Request.Context()
+	granularity := c.DefaultQuery("g", "30m")
 
-	hourly, err := h.ch.ClicksPerHour(ctx)
+	hourly, err := h.ch.ClicksPerInterval(ctx, granularity)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -140,20 +140,47 @@
     .device-bar.mobile  { background: var(--green); }
     .device-count { width: 4rem; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 
+    .toggle {
+      display: flex;
+      gap: 4px;
+    }
+    .toggle button {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .toggle button.active {
+      background: var(--text);
+      color: var(--bg);
+      border-color: var(--text);
+    }
+
     .empty { color: var(--muted); font-size: 0.8rem; text-align: center; padding: 24px 0; }
   </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>Analytics — last 24h</h1>
+  <h1>Analytics</h1>
+  <div class="toggle" id="granularityToggle">
+    <button onclick="setG('30s')" data-g="30s">30s</button>
+    <button onclick="setG('1m')"  data-g="1m">1m</button>
+    <button onclick="setG('15m')" data-g="15m">15m</button>
+    <button onclick="setG('30m')" data-g="30m" class="active">30m</button>
+  </div>
   <a class="nav" href="/">← dashboard</a>
   <span class="badge" id="updatedAt">—</span>
 </div>
 
 <div class="grid full">
   <div class="card">
-    <div class="card-title">clicks per hour</div>
+    <div class="card-title" id="chartTitle">clicks per 30m — last 24h</div>
     <div class="hourly-chart" id="hourlyChart"><div class="empty">loading...</div></div>
   </div>
 </div>
@@ -224,8 +251,23 @@
     }).join('');
   }
 
+  const labels = { '30s': '30s — last 1h', '1m': '1m — last 2h', '15m': '15m — last 12h', '30m': '30m — last 24h' };
+  let currentG = '30m';
+  let reloadTimer;
+
+  function setG(g) {
+    currentG = g;
+    document.querySelectorAll('#granularityToggle button').forEach(b => {
+      b.classList.toggle('active', b.dataset.g === g);
+    });
+    document.getElementById('chartTitle').textContent = 'clicks per ' + labels[g];
+    clearInterval(reloadTimer);
+    load();
+    reloadTimer = setInterval(load, g === '30s' ? 10000 : 30000);
+  }
+
   function load() {
-    fetch('/analytics/data').then(r => r.json()).then(data => {
+    fetch('/analytics/data?g=' + currentG).then(r => r.json()).then(data => {
       renderHourly(data.hourly);
       renderTopKeys(data.top);
       renderDevices(data.devices);
@@ -233,8 +275,7 @@
     });
   }
 
-  load();
-  setInterval(load, 30000);
+  setG('30m');
 </script>
 </body>
 </html>

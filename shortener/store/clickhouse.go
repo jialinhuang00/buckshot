@@ -36,15 +36,31 @@ type DeviceSplit struct {
 	Clicks uint64 `json:"clicks"`
 }
 
-// ClicksPerHour returns click counts grouped by hour for the last 24 hours.
-func (s *ClickHouseStore) ClicksPerHour(ctx context.Context) ([]HourlyClick, error) {
-	rows, err := s.conn.Query(ctx, `
-		SELECT toString(toStartOfHour(ts)) AS hour, count() AS clicks
+// ClicksPerInterval returns click counts grouped by the given granularity.
+// granularity: "30s" | "1m" | "15m" | "30m"
+func (s *ClickHouseStore) ClicksPerInterval(ctx context.Context, granularity string) ([]HourlyClick, error) {
+	type config struct {
+		bucket   string
+		interval string
+	}
+	cfgs := map[string]config{
+		"30s": {bucket: "toStartOfInterval(ts, INTERVAL 30 SECOND)", interval: "1 HOUR"},
+		"1m":  {bucket: "toStartOfMinute(ts)", interval: "2 HOUR"},
+		"15m": {bucket: "toStartOfInterval(ts, INTERVAL 15 MINUTE)", interval: "12 HOUR"},
+		"30m": {bucket: "toStartOfInterval(ts, INTERVAL 30 MINUTE)", interval: "24 HOUR"},
+	}
+	cfg, ok := cfgs[granularity]
+	if !ok {
+		cfg = cfgs["30m"]
+	}
+
+	q := `SELECT toString(` + cfg.bucket + `) AS bucket, count() AS clicks
 		FROM click_events
-		WHERE ts >= now() - INTERVAL 24 HOUR
-		GROUP BY hour
-		ORDER BY hour
-	`)
+		WHERE ts >= now() - INTERVAL ` + cfg.interval + `
+		GROUP BY bucket
+		ORDER BY bucket`
+
+	rows, err := s.conn.Query(ctx, q)
 	if err != nil {
 		return nil, err
 	}
