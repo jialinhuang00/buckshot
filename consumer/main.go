@@ -17,6 +17,18 @@ type ClickEvent struct {
 	UserAgent string    `json:"user_agent"`
 }
 
+const (
+	batchSize    = 500
+	batchTimeout = 2 * time.Second
+)
+
+type row struct {
+	shortKey string
+	ts       time.Time
+	ip       string
+	device   string
+}
+
 func main() {
 	ch, err := clickhouse.Open(&clickhouse.Options{
 		Addr: []string{"localhost:9000"},
@@ -38,35 +50,68 @@ func main() {
 
 	log.Println("consumer running, waiting for click events...")
 
-	for {
-		msg, err := r.ReadMessage(context.Background())
-		if err != nil {
-			log.Println("read error:", err)
-			continue
-		}
-
-		var event ClickEvent
-		if err := json.Unmarshal(msg.Value, &event); err != nil {
-			continue
-		}
-
-		// Simple device detection from user agent
-		device := "desktop"
-		if len(event.UserAgent) > 0 {
+	// goroutine reads Kafka → rows channel
+	rows := make(chan row, batchSize*4)
+	go func() {
+		for {
+			msg, err := r.ReadMessage(context.Background())
+			if err != nil {
+				log.Println("read error:", err)
+				continue
+			}
+			var event ClickEvent
+			if err := json.Unmarshal(msg.Value, &event); err != nil {
+				continue
+			}
+			device := "desktop"
 			for _, m := range []string{"Mobile", "Android", "iPhone"} {
 				if contains(event.UserAgent, m) {
 					device = "mobile"
 					break
 				}
 			}
+			rows <- row{event.ShortKey, event.Timestamp, event.IP, device}
 		}
+	}()
 
-		err = ch.Exec(context.Background(),
-			`INSERT INTO click_events (short_key, ts, ip, country, device) VALUES (?, ?, ?, ?, ?)`,
-			event.ShortKey, event.Timestamp, event.IP, "TW", device,
-		)
+	flush := func(batch []row) {
+		if len(batch) == 0 {
+			return
+		}
+		b, err := ch.PrepareBatch(context.Background(),
+			`INSERT INTO click_events (short_key, ts, ip, country, device)`)
 		if err != nil {
-			log.Println("clickhouse insert error:", err)
+			log.Println("prepare batch error:", err)
+			return
+		}
+		for _, r := range batch {
+			if err := b.Append(r.shortKey, r.ts, r.ip, "TW", r.device); err != nil {
+				log.Println("append error:", err)
+			}
+		}
+		if err := b.Send(); err != nil {
+			log.Println("batch send error:", err)
+			return
+		}
+		log.Printf("flushed %d events to clickhouse", len(batch))
+	}
+
+	batch := make([]row, 0, batchSize)
+	ticker := time.NewTicker(batchTimeout)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case r := <-rows:
+			batch = append(batch, r)
+			if len(batch) >= batchSize {
+				flush(batch)
+				batch = batch[:0]
+				ticker.Reset(batchTimeout)
+			}
+		case <-ticker.C:
+			flush(batch)
+			batch = batch[:0]
 		}
 	}
 }
