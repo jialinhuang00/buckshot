@@ -28,7 +28,8 @@ Open http://localhost:8080 for the dashboard, http://localhost:8080/analytics fo
 
 ## Config
 
-All addresses have defaults matching docker-compose.yml. Override via env vars:
+Defaults match docker-compose.yml — no config needed to run locally.
+Override by exporting env vars before starting services:
 
 | Var | Default |
 |---|---|
