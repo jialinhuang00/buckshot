@@ -1,5 +1,7 @@
 # URL Shortener Demo — command reference
 
+.PHONY: setup rerun infra-up infra-down infra-status db-init db-shell ch-init db-reset db-prune run-shortener run-consumer run-flush seed seed-parallel traffic build test-shorten test-redirect
+
 # ── Workflows ──────────────────────────────────────────────────────
 # First time setup: start infra, create schema, seed data.
 setup: infra-up db-init ch-init seed
@@ -33,8 +35,7 @@ ch-init:
 db-reset:
 	docker exec -i url-shortener-demo-postgres-1 psql -U user -d urlshortener -c \
 		"TRUNCATE url_mappings, url_stats, id_counter RESTART IDENTITY CASCADE; \
-		 INSERT INTO id_counter VALUES (1, 100000000); \
-		 UPDATE seed_ranges SET total = next_start + 50000;"
+		 INSERT INTO id_counter VALUES (1, 100000000);"
 	curl -s -X POST http://localhost:8123 --data "TRUNCATE TABLE click_events"
 	docker exec -i url-shortener-demo-redis-1 redis-cli FLUSHALL
 
@@ -58,6 +59,8 @@ run-flush:
 
 # ── Seed & traffic ─────────────────────────────────────────────────
 seed:
+	docker exec -i url-shortener-demo-postgres-1 psql -U user -d urlshortener -c \
+		"UPDATE seed_ranges SET total = next_start + 50000;"
 	go run ./cmd/seed/...
 
 # Run 3 seed workers in parallel — each atomically claims its own range from seed_ranges.
