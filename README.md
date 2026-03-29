@@ -44,6 +44,5 @@ All addresses have defaults matching docker-compose.yml. Override via env vars:
 Stop all services before resetting.
 
 ```bash
-make db-reset  # truncate data, keep schema
 make db-prune  # drop everything, recreate schema
 ```

@@ -168,11 +168,10 @@ Multiple workers atomically claim ranges via `UPDATE seed_ranges SET next_start 
 ## Reset
 
 ```
-make db-reset   # TRUNCATE PG rows + CH + Redis + Kafka topic (keep schema)
 make db-prune   # DROP all PG tables + CH + Redis + Kafka topic, recreate schema
 ```
 
-Both reset Kafka topic to avoid stale messages being re-consumed into fresh ClickHouse.
+Resets Kafka topic to avoid stale messages being re-consumed into fresh ClickHouse.
 
 **Stop consumer before resetting.** `kafka-go` buffers fetched messages in memory. If `run-consumer` is running during reset, buffered messages get written to the freshly-created ClickHouse — analytics will show stale data even before `make traffic` runs. Stop consumer first, restart after reset.
 
