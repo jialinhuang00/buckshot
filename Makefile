@@ -36,17 +36,19 @@ db-reset:
 		 UPDATE seed_ranges SET next_start = 0, total = 0;"
 	curl -s -X POST http://localhost:8123 --data "TRUNCATE TABLE click_events"
 	docker exec -i url-shortener-demo-redis-1 redis-cli FLUSHALL
-	docker exec -i url-shortener-demo-kafka-1 kafka-topics.sh --bootstrap-server localhost:9092 --delete --topic click-events || true
-	docker exec -i url-shortener-demo-kafka-1 kafka-topics.sh --bootstrap-server localhost:9092 --create --topic click-events --partitions 1 --replication-factor 1 || true
+	docker exec -i url-shortener-demo-kafka-1 kafka-topics --bootstrap-server localhost:9092 --delete --topic click-events || true
+	sleep 3
+	docker exec -i url-shortener-demo-kafka-1 kafka-topics --bootstrap-server localhost:9092 --create --topic click-events --partitions 1 --replication-factor 1 || true
 
 # Drop all tables and recreate schema from scratch. Resets seed_ranges to 0.
 db-prune:
 	docker exec -i url-shortener-demo-postgres-1 psql -U user -d urlshortener -c \
 		"DROP TABLE IF EXISTS url_mappings, url_stats, id_counter, seed_ranges CASCADE;"
-	curl -s -X POST http://localhost:8123 --data "DROP TABLE IF EXISTS click_events"
+	curl -s -X POST http://localhost:8123 --data "TRUNCATE TABLE click_events"
 	docker exec -i url-shortener-demo-redis-1 redis-cli FLUSHALL
-	docker exec -i url-shortener-demo-kafka-1 kafka-topics.sh --bootstrap-server localhost:9092 --delete --topic click-events || true
-	docker exec -i url-shortener-demo-kafka-1 kafka-topics.sh --bootstrap-server localhost:9092 --create --topic click-events --partitions 1 --replication-factor 1 || true
+	docker exec -i url-shortener-demo-kafka-1 kafka-topics --bootstrap-server localhost:9092 --delete --topic click-events || true
+	sleep 3
+	docker exec -i url-shortener-demo-kafka-1 kafka-topics --bootstrap-server localhost:9092 --create --topic click-events --partitions 1 --replication-factor 1 || true
 	$(MAKE) db-init ch-init
 
 # ── Run services ───────────────────────────────────────────────────

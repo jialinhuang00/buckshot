@@ -22,27 +22,29 @@ Note: Redis is on 6380 (not 6379) — local machine has its own Redis on 6379.
 
 | Binary | Command | Role |
 |---|---|---|
-| shortener | `make run-shortener` | POST /shorten, GET /:key, GET /stats, dashboard, GET /stream |
-| consumer | `make run-consumer` | Kafka → ClickHouse |
-| flush | `make run-flush` | Redis INCR → PostgreSQL every 5s |
+| shortener | `make run-shortener` | sole entry point — POST /shorten, GET /:key, GET /stats, dashboard, analytics |
+| consumer | `make run-consumer` | background worker — Kafka click-events → ClickHouse click_events |
+| flush | `make run-flush` | background worker — Redis clicks:\<key\> → PG url_stats every 5s |
 
-## Workflows
+shortener 是唯一的入口，consumer 和 flush 是背景 worker：
 
 ```
-make setup     # first time: infra-up + db-init + ch-init + seed
-make rerun     # re-run: db-reset + seed + traffic
+POST /shorten → PG url_mappings + Redis url:<key> + Redis bloom filter
+GET /:key     → Redis INCR clicks:<key>
+              → hub.Broadcast → SSE dashboard
+              → Kafka produce click-event → (consumer) → ClickHouse
+              → 302 redirect
+              → (flush every 5s) Redis clicks:<key> → PG url_stats
 ```
 
 ## Start sequence
 
 ```
-make infra-up      # start Docker containers
-make db-init       # create PostgreSQL schema (includes seed_ranges coordinator)
-make ch-init       # create ClickHouse schema
+make setup         # first time: infra-up + db-init + ch-init
 make run-shortener # start API (terminal 1)
 make run-consumer  # start Kafka consumer (terminal 2)
 make run-flush     # start flush worker (terminal 3)
-make seed          # seed 50,000 URLs — writes to PG + Redis bloom filter
+make seed          # seed 50,000 URLs (repeatable, auto-extends)
 make traffic       # simulate continuous skewed click traffic (Ctrl+C to stop)
 ```
 
@@ -57,13 +59,18 @@ make traffic       # simulate continuous skewed click traffic (Ctrl+C to stop)
 | `shortener/main.go` | API entry point |
 | `shortener/hub/hub.go` | SSE broadcast hub — pushes clicked key to all clients |
 | `shortener/handler/stream.go` | GET /stream — SSE endpoint for real-time dashboard |
-| `shortener/handler/dashboard.go` | Dashboard HTML (chips + bar chart, SSE-driven) |
+| `shortener/handler/dashboard.go` | Serves static dashboard HTML |
+| `shortener/handler/analytics.go` | GET /analytics, GET /analytics/data |
+| `shortener/handler/stats.go` | GET /stats, GET /stats/:key, GET /stats/:key/stream |
+| `shortener/store/clickhouse.go` | ClickHouse queries (clicks/interval, top keys, device split) |
 | `shortener/store/redis.go` | Cache + Bloom filter (bitset) + INCR |
 | `shortener/keygen/counter.go` | DB-backed atomic counter → base62 |
+| `shortener/static/dashboard.html` | Dashboard UI (chips / bar / rows, SSE-driven) |
+| `shortener/static/analytics.html` | Analytics UI (clicks/interval, top 10, device split) |
 | `consumer/main.go` | Kafka consumer → ClickHouse |
 | `flush/main.go` | Redis INCR flush → PostgreSQL every 5s |
 | `cmd/seed/main.go` | Distributed seed — workers claim ranges from seed_ranges |
-| `cmd/traffic/main.go` | Continuous traffic simulation (80/20 Zipf-like) |
+| `cmd/traffic/main.go` | Continuous traffic simulation (80/20 Zipf-like, reloads keys every 30s) |
 
 ## Architecture
 
@@ -90,10 +97,16 @@ Background
   consumer: Kafka → ClickHouse click_events
   flush:    Redis clicks:<key> every 5s → PG url_stats
 
-Dashboard
-  GET /stats  → top 100 (PG total + Redis delta)
+Dashboard  http://localhost:8080/
+  GET /stats  → top 100 (PG total + Redis delta), re-sorted after adding delta
   GET /stream → SSE per-click push → browser +1
-               resync every 10s (re-rank, fade dropped)
+               resync every 10s (FLIP animation, fade dropped keys)
+
+Analytics  http://localhost:8080/analytics
+  GET /analytics/data?g=30s|1m|15m|30m
+    → clicks per interval (ClickHouse)
+    → top 10 keys + long_url (ClickHouse + PG join)
+    → device split (ClickHouse)
 ```
 
 ## DB schema (PostgreSQL)
@@ -103,16 +116,24 @@ Dashboard
 - `id_counter` — single row, atomic counter for key generation
 - `seed_ranges` — distributed seed coordinator (next_start, total)
 
+## ClickHouse schema
+
+- `click_events` — short_key, ts, ip, country, device (append-only, MergeTree)
+
 ## Seed design
 
-Multiple workers atomically claim ranges via `UPDATE seed_ranges SET next_start = next_start + batch ... RETURNING next_start - batch`. No overlap, no locks beyond PG row-level locking. `total` advances on each `db-reset` so index never reuses old values.
+Multiple workers atomically claim ranges via `UPDATE seed_ranges SET next_start = next_start + batch ... RETURNING next_start - batch`. No overlap. `make seed` auto-extends `total` by 50000 each run, so repeated calls keep adding data.
 
 ## Reset
 
 ```
-make db-reset   # TRUNCATE rows, keep schema, advance seed_ranges.total by 50000
-make db-prune   # DROP all tables, recreate schema, seed_ranges resets to 0
+make db-reset   # TRUNCATE PG rows + CH + Redis + Kafka topic (keep schema)
+make db-prune   # DROP all PG tables + CH + Redis + Kafka topic, recreate schema
 ```
+
+Both reset Kafka topic to avoid stale messages being re-consumed into fresh ClickHouse.
+
+**Stop consumer before resetting.** `kafka-go` buffers fetched messages in memory. If `run-consumer` is running during reset, buffered messages get written to the freshly-created ClickHouse — analytics will show stale data even before `make traffic` runs. Stop consumer first, restart after reset.
 
 ## Redis keys
 
