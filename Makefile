@@ -35,7 +35,8 @@ ch-init:
 db-reset:
 	docker exec -i url-shortener-demo-postgres-1 psql -U user -d urlshortener -c \
 		"TRUNCATE url_mappings, url_stats, id_counter RESTART IDENTITY CASCADE; \
-		 INSERT INTO id_counter VALUES (1, 100000000);"
+		 INSERT INTO id_counter VALUES (1, 100000000); \
+		 UPDATE seed_ranges SET next_start = 0, total = 0;"
 	curl -s -X POST http://localhost:8123 --data "TRUNCATE TABLE click_events"
 	docker exec -i url-shortener-demo-redis-1 redis-cli FLUSHALL
 
