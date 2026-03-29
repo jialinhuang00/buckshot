@@ -185,8 +185,18 @@
       0%   { opacity: 1; transform: scale(1); }
       100% { opacity: 0; transform: scale(0.75); }
     }
+    @keyframes slide-in {
+      0%   { opacity: 0; transform: translateX(-16px); }
+      100% { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slide-out {
+      0%   { opacity: 1; transform: translateX(0); }
+      100% { opacity: 0; transform: translateX(16px); }
+    }
     .fade-in  { animation: fade-in  0.4s ease-out forwards; }
     .fade-out { animation: fade-out 0.4s ease-in  forwards; pointer-events: none; }
+    .slide-in  { animation: slide-in  0.3s ease-out forwards; }
+    .slide-out { animation: slide-out 0.3s ease-in  forwards; pointer-events: none; }
 
     /* ── Detail view ── */
     .detail { display: none; }
@@ -378,7 +388,7 @@
         const row  = document.getElementById('row-' + key);
         if (chip) chip.classList.add('fade-out');
         if (col)  col.classList.add('fade-out');
-        if (row)  row.classList.add('fade-out');
+        if (row)  row.classList.add('slide-out');
       });
 
       setTimeout(() => {
@@ -389,7 +399,7 @@
             const chip = document.getElementById('chip-' + r.short_key);
             const row  = document.getElementById('row-' + r.short_key);
             if (chip) chip.classList.add('fade-in');
-            if (row)  row.classList.add('fade-in');
+            if (row)  row.classList.add('slide-in');
           }
         });
       }, 450);
