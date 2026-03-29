@@ -64,6 +64,8 @@ seed:
 # Run 3 seed workers in parallel — each atomically claims its own range from seed_ranges.
 # Workers compete for batches; the coordinator row prevents overlap.
 seed-parallel:
+	docker exec -i url-shortener-demo-postgres-1 psql -U user -d urlshortener -c \
+		"UPDATE seed_ranges SET total = next_start + 50000;"
 	go build -o /tmp/seed-bin ./cmd/seed/...
 	/tmp/seed-bin & /tmp/seed-bin & /tmp/seed-bin & wait
 
