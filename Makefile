@@ -1,13 +1,10 @@
 # URL Shortener Demo — command reference
 
-.PHONY: setup rerun infra-up infra-down infra-status db-init db-shell ch-init db-reset db-prune run-shortener run-consumer run-flush seed seed-parallel traffic build test-shorten test-redirect
+.PHONY: setup infra-up infra-down infra-status db-init db-shell ch-init db-reset db-prune run-shortener run-consumer run-flush seed seed-parallel traffic build test-shorten test-redirect
 
 # ── Workflows ──────────────────────────────────────────────────────
 # First time setup: start infra, create schema, seed data.
 setup: infra-up db-init ch-init seed
-
-# Re-run: clear data (keep schema), seed fresh batch. Run make traffic separately.
-rerun: db-reset seed
 
 # ── Infra ──────────────────────────────────────────────────────────
 infra-up:
