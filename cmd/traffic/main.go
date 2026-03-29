@@ -27,7 +27,11 @@ type keySet struct {
 }
 
 func loadKeys(ctx context.Context, pool *pgxpool.Pool) *keySet {
-	rows, err := pool.Query(ctx, `SELECT short_key FROM url_mappings`)
+	rows, err := pool.Query(ctx, `
+		SELECT m.short_key FROM url_mappings m
+		LEFT JOIN url_stats s ON s.short_key = m.short_key
+		ORDER BY COALESCE(s.total_clicks, 0) DESC
+	`)
 	if err != nil {
 		log.Printf("reload keys: %v", err)
 		return nil
