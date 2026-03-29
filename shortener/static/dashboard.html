@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>URL Shortener — Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #09090b;
+      --surface:   #18181b;
+      --border:    #27272a;
+      --muted:     #71717a;
+      --text:      #fafafa;
+      --text-dim:  #a1a1aa;
+      --accent:    #ef4444;
+      --accent-bg: rgba(239,68,68,0.12);
+      --bar:       #3f3f46;
+      --bar-hot:   #ef4444;
+      --radius:    0.5rem;
+    }
+
+    body {
+      font-family: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 32px 24px;
+    }
+
+    .container { max-width: 100%; }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .header h1 { font-size: 0.9rem; color: var(--text-dim); font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; flex: 1; }
+    .badge {
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .badge.live::before { content: '● '; color: #22c55e; }
+
+    /* ── View toggle ── */
+    .toggle {
+      display: flex;
+      gap: 4px;
+    }
+    .toggle button {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .toggle button.active {
+      background: var(--text);
+      color: var(--bg);
+      border-color: var(--text);
+    }
+
+    /* ── Chip view ── */
+    .grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: border-color 0.15s;
+      font-size: 0.8rem;
+    }
+    .chip:hover { border-color: var(--muted); }
+    .key   { color: var(--text-dim); }
+    .count { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
+
+    /* ── Bar chart view ── */
+    .barchart {
+      display: none;
+      height: 320px;
+      align-items: flex-end;
+      gap: 4px;
+      padding-bottom: 28px;
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+    .barchart.visible { display: flex; }
+
+    .bar-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+      min-width: 36px;
+      cursor: pointer;
+      flex: 1;
+      max-width: 64px;
+    }
+    .bar-col:hover .bar { background: var(--text-dim); }
+
+    .bar {
+      width: 100%;
+      background: var(--bar);
+      border-radius: 3px 3px 0 0;
+      transition: height 0.4s ease, background 0.2s;
+      min-height: 2px;
+    }
+    .bar.hot { background: var(--bar-hot); }
+
+    .bar-label {
+      font-size: 0.6rem;
+      color: var(--muted);
+      writing-mode: vertical-lr;
+      transform: rotate(180deg);
+      white-space: nowrap;
+      height: 24px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Row view ── */
+    .rowlist {
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .rowlist.visible { display: flex; }
+
+    .row {
+      display: grid;
+      grid-template-columns: 2rem 6rem 1fr 6rem;
+      align-items: center;
+      gap: 16px;
+      padding: 8px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: border-color 0.15s;
+      font-size: 0.8rem;
+    }
+    .row:hover { border-color: var(--muted); }
+    .row-rank  { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+    .row-key   { color: var(--text-dim); }
+    .row-url   { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.7rem; }
+    .row-count { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+
+    /* ── Flash ── */
+    @keyframes flash-count {
+      0%   { color: var(--accent); }
+      100% { color: var(--text); }
+    }
+    @keyframes flash-bar {
+      0%   { background: #fff; }
+      100% { background: var(--bar); }
+    }
+    .flash-count { animation: flash-count 0.8s ease-out forwards; }
+    .flash-bar   { animation: flash-bar   0.8s ease-out forwards; }
+
+    @keyframes fade-in {
+      0%   { opacity: 0; transform: scale(0.85); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    @keyframes fade-out {
+      0%   { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(0.75); }
+    }
+    .fade-in  { animation: fade-in  0.4s ease-out forwards; }
+    .fade-out { animation: fade-out 0.4s ease-in  forwards; pointer-events: none; }
+
+    /* ── Detail view ── */
+    .detail { display: none; }
+    .detail.visible { display: block; }
+    .back {
+      font-size: 0.8rem;
+      color: var(--muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 24px;
+      transition: color 0.15s;
+    }
+    .back:hover { color: var(--text); }
+    .detail-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+    }
+    .detail-key   { font-size: 0.8rem; color: var(--muted); margin-bottom: 12px; letter-spacing: 0.05em; text-transform: uppercase; }
+    .detail-url   { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 20px; word-break: break-all; }
+    .detail-count { font-size: 3.5rem; font-weight: 700; letter-spacing: -3px; line-height: 1; font-variant-numeric: tabular-nums; transition: color 0.3s; }
+    .detail-count.bump { color: var(--accent); }
+    .detail-sub   { font-size: 0.75rem; color: var(--muted); margin-top: 8px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- List view -->
+  <div id="listView">
+    <div class="header">
+      <h1>Top 100 URLs</h1>
+      <div class="toggle">
+        <button id="btnChips" class="active" onclick="setView('chips')">chips</button>
+        <button id="btnBar"   onclick="setView('bar')">bar</button>
+        <button id="btnRows"  onclick="setView('rows')">rows</button>
+      </div>
+      <span class="badge live">live</span>
+    </div>
+
+    <div class="grid" id="grid"></div>
+    <div class="barchart" id="barchart"></div>
+    <div class="rowlist" id="rowlist"></div>
+  </div>
+
+  <!-- Detail view (SSE) -->
+  <div id="detailView" class="detail">
+    <span class="back" onclick="showList()">← back</span>
+    <div class="detail-card">
+      <div class="detail-key" id="detailKey"></div>
+      <div class="detail-url" id="detailURL"></div>
+      <div class="detail-count" id="detailCount">—</div>
+      <div class="detail-sub">total clicks · live</div>
+    </div>
+  </div>
+
+</div>
+<script>
+  let streamEs, detailEs, resyncTimer;
+  let counts = {};
+  let order  = [];
+  let currentView = 'chips';
+
+  function setView(v) {
+    currentView = v;
+    document.getElementById('grid').style.display    = v === 'chips' ? '' : 'none';
+    document.getElementById('barchart').classList.toggle('visible', v === 'bar');
+    document.getElementById('rowlist').classList.toggle('visible',  v === 'rows');
+    document.getElementById('btnChips').classList.toggle('active', v === 'chips');
+    document.getElementById('btnBar').classList.toggle('active',   v === 'bar');
+    document.getElementById('btnRows').classList.toggle('active',  v === 'rows');
+  }
+
+  // ── Full render (initial + resync) ────────────────────────
+  let longURLs = {};
+
+  function renderAll(data) {
+    counts = {};
+    order  = data.map(r => r.short_key);
+    data.forEach(r => {
+      counts[r.short_key]   = Number(r.total_clicks);
+      longURLs[r.short_key] = r.long_url || '';
+    });
+    renderChips();
+    renderBars();
+    renderRows();
+  }
+
+  function renderChips() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = order.map(key =>
+      '<div class="chip" id="chip-' + key + '" onclick="showDetail(\'' + key + '\')" title="' + (longURLs[key] || '') + '">' +
+      '<span class="key">' + key + '</span>' +
+      '<span class="count" id="cnt-' + key + '">' + counts[key].toLocaleString() + '</span>' +
+      '</div>'
+    ).join('');
+  }
+
+  function renderBars() {
+    const top    = order.slice(0, 40);
+    const barMax = Math.max(...top.map(k => counts[k] || 0)) || 1;
+    const chartH = 280;
+    const barchart = document.getElementById('barchart');
+    barchart.innerHTML = top.map((key, i) => {
+      const h     = Math.max(2, Math.round(((counts[key] || 0) / barMax) * chartH));
+      const isHot = i < Math.max(1, Math.round(top.length * 0.1));
+      return '<div class="bar-col" id="bar-col-' + key + '" onclick="showDetail(\'' + key + '\')" title="' + key + '">' +
+        '<div class="bar' + (isHot ? ' hot' : '') + '" id="bar-' + key + '" style="height:' + h + 'px"></div>' +
+        '<div class="bar-label">' + key.slice(0, 4) + '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  function renderRows() {
+    const rowlist = document.getElementById('rowlist');
+    rowlist.innerHTML = order.map((key, i) =>
+      '<div class="row" id="row-' + key + '" onclick="showDetail(\'' + key + '\')">' +
+      '<span class="row-rank">' + (i + 1) + '</span>' +
+      '<span class="row-key">' + key + '</span>' +
+      '<span class="row-url">' + (longURLs[key] || '') + '</span>' +
+      '<span class="row-count" id="row-cnt-' + key + '">' + counts[key].toLocaleString() + '</span>' +
+      '</div>'
+    ).join('');
+  }
+
+  // ── SSE: per-click update ──────────────────────────────────
+  function startStream() {
+    if (streamEs) streamEs.close();
+    streamEs = new EventSource('/stream');
+    streamEs.onmessage = e => {
+      const key = e.data.trim();
+      if (!counts.hasOwnProperty(key)) return;
+      counts[key]++;
+      updateChip(key);
+      updateBar(key);
+      updateRow(key);
+    };
+  }
+
+  function updateChip(key) {
+    const el = document.getElementById('cnt-' + key);
+    if (!el) return;
+    el.textContent = counts[key].toLocaleString();
+    el.classList.remove('flash-count');
+    void el.offsetWidth;
+    el.classList.add('flash-count');
+  }
+
+  function updateBar(key) {
+    const bar = document.getElementById('bar-' + key);
+    if (!bar) return;
+    const top    = order.slice(0, 40);
+    const barMax = Math.max(...top.map(k => counts[k] || 0)) || 1;
+    const h      = Math.max(2, Math.round(((counts[key] || 0) / barMax) * 280));
+    bar.style.height = h + 'px';
+    bar.classList.remove('flash-bar');
+    void bar.offsetWidth;
+    bar.classList.add('flash-bar');
+  }
+
+  function updateRow(key) {
+    const el = document.getElementById('row-cnt-' + key);
+    if (!el) return;
+    el.textContent = counts[key].toLocaleString();
+    el.classList.remove('flash-count');
+    void el.offsetWidth;
+    el.classList.add('flash-count');
+  }
+
+  // ── Resync every 10s ──────────────────────────────────────
+  function resync() {
+    fetch('/stats').then(r => r.json()).then(data => {
+      if (!data || !data.length) return;
+
+      const newKeys = new Set(data.map(r => r.short_key));
+      const dropped = order.filter(k => !newKeys.has(k));
+
+      if (dropped.length === 0) {
+        renderAll(data);
+        return;
+      }
+
+      dropped.forEach(key => {
+        const chip = document.getElementById('chip-' + key);
+        const col  = document.getElementById('bar-col-' + key);
+        const row  = document.getElementById('row-' + key);
+        if (chip) chip.classList.add('fade-out');
+        if (col)  col.classList.add('fade-out');
+        if (row)  row.classList.add('fade-out');
+      });
+
+      setTimeout(() => {
+        const oldSet = new Set(order);
+        renderAll(data);
+        data.forEach(r => {
+          if (!oldSet.has(r.short_key)) {
+            const chip = document.getElementById('chip-' + r.short_key);
+            const row  = document.getElementById('row-' + r.short_key);
+            if (chip) chip.classList.add('fade-in');
+            if (row)  row.classList.add('fade-in');
+          }
+        });
+      }, 450);
+    });
+  }
+
+  // ── List view ──────────────────────────────────────────────
+  function showList() {
+    if (detailEs) { detailEs.close(); detailEs = null; }
+    document.getElementById('listView').style.display = '';
+    document.getElementById('detailView').classList.remove('visible');
+  }
+
+  // ── Detail view ───────────────────────────────────────────
+  function showDetail(key) {
+    document.getElementById('listView').style.display = 'none';
+    document.getElementById('detailView').classList.add('visible');
+    document.getElementById('detailKey').textContent  = key;
+    document.getElementById('detailURL').textContent  = longURLs[key] || '';
+    document.getElementById('detailCount').textContent = (counts[key] || 0).toLocaleString();
+
+    let lastVal = counts[key] || 0;
+    if (detailEs) detailEs.close();
+    detailEs = new EventSource('/stats/' + key + '/stream');
+    detailEs.onmessage = e => {
+      const val = Number(e.data);
+      const el  = document.getElementById('detailCount');
+      el.textContent = val.toLocaleString();
+      if (val > lastVal) {
+        el.classList.remove('bump');
+        void el.offsetWidth;
+        el.classList.add('bump');
+        setTimeout(() => el.classList.remove('bump'), 600);
+      }
+      lastVal = val;
+    };
+  }
+
+  // ── Boot ─────────────────────────────────────────────────
+  fetch('/stats').then(r => r.json()).then(data => {
+    if (data && data.length) renderAll(data);
+    startStream();
+    resyncTimer = setInterval(resync, 10000);
+  });
+</script>
+</body>
+</html>
