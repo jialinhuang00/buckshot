@@ -63,7 +63,8 @@ seed:
 # Run 3 seed workers in parallel — each atomically claims its own range from seed_ranges.
 # Workers compete for batches; the coordinator row prevents overlap.
 seed-parallel:
-	go run ./cmd/seed/... & go run ./cmd/seed/... & go run ./cmd/seed/... & wait
+	go build -o /tmp/seed-bin ./cmd/seed/...
+	/tmp/seed-bin & /tmp/seed-bin & /tmp/seed-bin & wait
 
 traffic:
 	go run ./cmd/traffic/...

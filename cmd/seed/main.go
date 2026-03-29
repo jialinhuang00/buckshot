@@ -179,6 +179,7 @@ func main() {
 
 func bloomAdd(ctx context.Context, rdb *redis.Client, key string) {
 	h := sha256.Sum256([]byte(key))
+	pipe := rdb.Pipeline()
 	for i := 0; i < bloomHashes; i++ {
 		offset := i * 4
 		var val int64
@@ -188,9 +189,9 @@ func bloomAdd(ctx context.Context, rdb *redis.Client, key string) {
 		if val < 0 {
 			val = -val
 		}
-		if err := rdb.SetBit(ctx, bloomKey, val%bloomSize, 1).Err(); err != nil {
-			log.Printf("bloom setbit error: %v", err)
-			return
-		}
+		pipe.SetBit(ctx, bloomKey, val%bloomSize, 1)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		log.Printf("bloom pipeline error: %v", err)
 	}
 }
