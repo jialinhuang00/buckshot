@@ -68,47 +68,32 @@ make traffic       # simulate continuous skewed click traffic (Ctrl+C to stop)
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Write path                                                     │
-│                                                                 │
-│  POST /shorten                                                  │
-│    → id_counter (PG atomic RETURNING)                          │
-│    → base62 short_key                                           │
-│    → PG url_mappings (short_key → long_url)                    │
-│    → Redis cache  url:<key> = long_url  (TTL 10min)            │
-│    → Redis Bloom  bloom:urls  SetBit ×5                        │
-└─────────────────────────────────────────────────────────────────┘
+Write path
+  POST /shorten
+    → id_counter (PG atomic RETURNING)
+    → base62 short_key
+    → PG url_mappings
+    → Redis cache url:<key>  (TTL 10min)
+    → Redis Bloom SetBit ×5
 
-┌─────────────────────────────────────────────────────────────────┐
-│  Read path                                                      │
-│                                                                 │
-│  GET /:key                                                      │
-│    → Bloom filter (miss → 404, no PG hit)                      │
-│    → Redis cache  url:<key>                                     │
-│        hit  → long_url                                         │
-│        miss → PG url_mappings → populate cache                 │
-│    → Redis INCR  clicks:<key>                                   │
-│    → hub.Broadcast(key)   ← SSE push to dashboard             │
-│    → Kafka produce  click-events                               │
-│    → 302 redirect                                               │
-└─────────────────────────────────────────────────────────────────┘
+Read path
+  GET /:key
+    → Bloom filter miss → 404
+    → Redis cache hit  → long_url
+                  miss → PG → populate cache
+    → Redis INCR clicks:<key>
+    → hub.Broadcast(key) → SSE dashboard
+    → Kafka click-events
+    → 302 redirect
 
-┌─────────────────────────────────────────────────────────────────┐
-│  Background workers                                             │
-│                                                                 │
-│  consumer: Kafka click-events → ClickHouse click_events        │
-│  flush:    Redis clicks:<key> every 5s → PG url_stats          │
-└─────────────────────────────────────────────────────────────────┘
+Background
+  consumer: Kafka → ClickHouse click_events
+  flush:    Redis clicks:<key> every 5s → PG url_stats
 
-┌─────────────────────────────────────────────────────────────────┐
-│  Dashboard                                                      │
-│                                                                 │
-│  GET /       → HTML                                             │
-│  GET /stats  → top 100 (PG total + Redis delta + long_url)     │
-│  GET /stream → SSE, per-click key push → browser increments   │
-│               resync GET /stats every 10s                      │
-│               (fixes drift, fadeout for dropped keys)          │
-└─────────────────────────────────────────────────────────────────┘
+Dashboard
+  GET /stats  → top 100 (PG total + Redis delta)
+  GET /stream → SSE per-click push → browser +1
+               resync every 10s (re-rank, fade dropped)
 ```
 
 ## DB schema (PostgreSQL)
