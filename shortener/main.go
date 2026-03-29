@@ -20,6 +20,12 @@ func main() {
 	counter := keygen.NewCounter(pg.Pool())
 	stats := handler.NewStatsHandler(redis, pg.Pool())
 
+	ch, err := store.NewClickHouseStore("localhost:9000")
+	if err != nil {
+		log.Fatal("clickhouse:", err)
+	}
+	analytics := handler.NewAnalyticsHandler(ch)
+
 	r := gin.Default()
 	r.GET("/", handler.Dashboard)
 	r.POST("/shorten", handler.NewShortenHandler(pg, redis, counter).Handle)
@@ -27,6 +33,8 @@ func main() {
 	r.GET("/stats/:key", stats.Snapshot)
 	r.GET("/stats/:key/stream", stats.Stream)
 	r.GET("/stream", handler.Stream)
+	r.GET("/analytics", analytics.Page)
+	r.GET("/analytics/data", analytics.Data)
 	r.GET("/:key", handler.NewRedirectHandler(pg, redis, kafka).Handle)
 
 	log.Println("shortener running on :8080")

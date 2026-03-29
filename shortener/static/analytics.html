@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>URL Shortener — Analytics</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #09090b;
+      --surface:  #18181b;
+      --border:   #27272a;
+      --muted:    #71717a;
+      --text:     #fafafa;
+      --text-dim: #a1a1aa;
+      --accent:   #ef4444;
+      --blue:     #3b82f6;
+      --green:    #22c55e;
+      --radius:   0.5rem;
+    }
+
+    body {
+      font-family: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 32px 24px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+    .header h1 { font-size: 0.9rem; color: var(--text-dim); font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; flex: 1; }
+    .nav {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-decoration: none;
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      transition: color 0.15s;
+    }
+    .nav:hover { color: var(--text); }
+
+    .badge {
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .grid.full { grid-template-columns: 1fr; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+    .card-title {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 20px;
+    }
+
+    /* ── Hourly bar chart ── */
+    .hourly-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 120px;
+    }
+    .h-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+    }
+    .h-bar {
+      width: 100%;
+      background: var(--blue);
+      border-radius: 2px 2px 0 0;
+      min-height: 2px;
+      opacity: 0.8;
+    }
+    .h-label {
+      font-size: 0.55rem;
+      color: var(--muted);
+      writing-mode: vertical-lr;
+      transform: rotate(180deg);
+      height: 20px;
+      overflow: hidden;
+    }
+
+    /* ── Top keys ── */
+    .top-row {
+      display: grid;
+      grid-template-columns: 1.5rem 5rem 1fr 4rem;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.8rem;
+    }
+    .top-row:last-child { border-bottom: none; }
+    .top-rank  { color: var(--muted); text-align: right; }
+    .top-key   { color: var(--text-dim); }
+    .top-bar-wrap { position: relative; height: 4px; background: var(--border); border-radius: 2px; }
+    .top-bar   { height: 100%; background: var(--accent); border-radius: 2px; }
+    .top-count { color: var(--text); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* ── Device split ── */
+    .device-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 0;
+      font-size: 0.8rem;
+    }
+    .device-name  { width: 5rem; color: var(--text-dim); }
+    .device-bar-wrap { flex: 1; height: 6px; background: var(--border); border-radius: 3px; }
+    .device-bar   { height: 100%; border-radius: 3px; }
+    .device-bar.desktop { background: var(--blue); }
+    .device-bar.mobile  { background: var(--green); }
+    .device-count { width: 4rem; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+    .empty { color: var(--muted); font-size: 0.8rem; text-align: center; padding: 24px 0; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Analytics — last 24h</h1>
+  <a class="nav" href="/">← dashboard</a>
+  <span class="badge" id="updatedAt">—</span>
+</div>
+
+<div class="grid full">
+  <div class="card">
+    <div class="card-title">clicks per hour</div>
+    <div class="hourly-chart" id="hourlyChart"><div class="empty">loading...</div></div>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <div class="card-title">top 10 keys</div>
+    <div id="topKeys"><div class="empty">loading...</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">device split</div>
+    <div id="deviceSplit"><div class="empty">loading...</div></div>
+  </div>
+</div>
+
+<script>
+  function fmt(n) { return Number(n).toLocaleString(); }
+
+  function renderHourly(data) {
+    const chart = document.getElementById('hourlyChart');
+    if (!data || data.length === 0) {
+      chart.innerHTML = '<div class="empty">no data</div>';
+      return;
+    }
+    const maxClicks = Math.max(...data.map(d => d.clicks)) || 1;
+    const chartH = 100;
+    chart.innerHTML = data.map(d => {
+      const h    = Math.max(2, Math.round((d.clicks / maxClicks) * chartH));
+      const hour = d.hour.slice(11, 16); // HH:MM
+      return '<div class="h-col">' +
+        '<div class="h-bar" style="height:' + h + 'px" title="' + d.hour + ': ' + fmt(d.clicks) + '"></div>' +
+        '<div class="h-label">' + hour + '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  function renderTopKeys(data) {
+    const el = document.getElementById('topKeys');
+    if (!data || data.length === 0) {
+      el.innerHTML = '<div class="empty">no data</div>';
+      return;
+    }
+    const max = data[0].clicks || 1;
+    el.innerHTML = data.map((d, i) =>
+      '<div class="top-row">' +
+      '<span class="top-rank">' + (i + 1) + '</span>' +
+      '<span class="top-key">' + d.short_key + '</span>' +
+      '<div class="top-bar-wrap"><div class="top-bar" style="width:' + Math.round((d.clicks / max) * 100) + '%"></div></div>' +
+      '<span class="top-count">' + fmt(d.clicks) + '</span>' +
+      '</div>'
+    ).join('');
+  }
+
+  function renderDevices(data) {
+    const el = document.getElementById('deviceSplit');
+    if (!data || data.length === 0) {
+      el.innerHTML = '<div class="empty">no data</div>';
+      return;
+    }
+    const total = data.reduce((s, d) => s + d.clicks, 0) || 1;
+    el.innerHTML = data.map(d => {
+      const pct = Math.round((d.clicks / total) * 100);
+      return '<div class="device-row">' +
+        '<span class="device-name">' + d.device + '</span>' +
+        '<div class="device-bar-wrap"><div class="device-bar ' + d.device + '" style="width:' + pct + '%"></div></div>' +
+        '<span class="device-count">' + pct + '%</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  function load() {
+    fetch('/analytics/data').then(r => r.json()).then(data => {
+      renderHourly(data.hourly);
+      renderTopKeys(data.top);
+      renderDevices(data.devices);
+      document.getElementById('updatedAt').textContent = new Date().toLocaleTimeString();
+    });
+  }
+
+  load();
+  setInterval(load, 30000);
+</script>
+</body>
+</html>
