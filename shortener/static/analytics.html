@@ -114,15 +114,17 @@
       grid-template-columns: 1.5rem 5rem 1fr 4rem;
       align-items: center;
       gap: 12px;
-      padding: 6px 0;
+      padding: 8px 0;
       border-bottom: 1px solid var(--border);
       font-size: 0.8rem;
     }
     .top-row:last-child { border-bottom: none; }
     .top-rank  { color: var(--muted); text-align: right; }
     .top-key   { color: var(--text-dim); }
-    .top-bar-wrap { position: relative; height: 4px; background: var(--border); border-radius: 2px; }
+    .top-url-wrap { overflow: hidden; }
+    .top-bar-wrap { position: relative; height: 4px; background: var(--border); border-radius: 2px; margin-top: 4px; }
     .top-bar   { height: 100%; background: var(--accent); border-radius: 2px; }
+    .top-url   { font-size: 0.65rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .top-count { color: var(--text); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
 
     /* ── Device split ── */
@@ -228,7 +230,10 @@
       '<div class="top-row">' +
       '<span class="top-rank">' + (i + 1) + '</span>' +
       '<span class="top-key">' + d.short_key + '</span>' +
-      '<div class="top-bar-wrap"><div class="top-bar" style="width:' + Math.round((d.clicks / max) * 100) + '%"></div></div>' +
+      '<div class="top-url-wrap">' +
+        '<div class="top-url">' + (d.long_url || '—') + '</div>' +
+        '<div class="top-bar-wrap"><div class="top-bar" style="width:' + Math.round((d.clicks / max) * 100) + '%"></div></div>' +
+      '</div>' +
       '<span class="top-count">' + fmt(d.clicks) + '</span>' +
       '</div>'
     ).join('');

@@ -28,6 +28,7 @@ type HourlyClick struct {
 
 type TopKey struct {
 	ShortKey string `json:"short_key"`
+	LongURL  string `json:"long_url"`
 	Clicks   uint64 `json:"clicks"`
 }
 

@@ -24,7 +24,7 @@ func main() {
 	if err != nil {
 		log.Fatal("clickhouse:", err)
 	}
-	analytics := handler.NewAnalyticsHandler(ch)
+	analytics := handler.NewAnalyticsHandler(ch, pg.Pool())
 
 	r := gin.Default()
 	r.GET("/", handler.Dashboard)
