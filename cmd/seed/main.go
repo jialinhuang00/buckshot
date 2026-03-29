@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"errors"
 	"flag"
-	"fmt"
 	"log"
 	"math/rand"
 
@@ -46,50 +45,77 @@ func randomShortKey(i int64) string {
 	return s
 }
 
-var urlTemplates = []func(i int64) string{
-	func(i int64) string {
-		repos := []string{"golang/go", "kubernetes/kubernetes", "moby/moby", "cli/cli", "gin-gonic/gin", "redis/redis", "facebook/react", "vercel/next.js"}
-		return fmt.Sprintf("https://github.com/%s/issues/%d", repos[i%int64(len(repos))], 1000+i)
-	},
-	func(i int64) string {
-		repos := []string{"golang/go", "torvalds/linux", "microsoft/vscode", "anthropics/anthropic-sdk-go"}
-		return fmt.Sprintf("https://github.com/%s/pull/%d", repos[i%int64(len(repos))], 500+i)
-	},
-	func(i int64) string {
-		topics := []string{"how-to-use-goroutines", "difference-between-interface-and-struct", "how-does-kafka-replication-work", "postgres-index-types-explained"}
-		return fmt.Sprintf("https://stackoverflow.com/questions/%d/%s", 10000000+i, topics[i%int64(len(topics))])
-	},
-	func(i int64) string {
-		ids := []string{"dQw4w9WgXcQ", "ysz5S6PUM-U", "oHg5SJYRHA0", "ZZ5LpwO-An4", "9bZkp7q19f0"}
-		return fmt.Sprintf("https://www.youtube.com/watch?v=%s&t=%ds", ids[i%int64(len(ids))], i%3600)
-	},
-	func(i int64) string {
-		subs := []string{"r/golang", "r/kubernetes", "r/programming", "r/devops", "r/distributed"}
-		return fmt.Sprintf("https://www.reddit.com/%s/comments/%s/discussion_%d/", subs[i%int64(len(subs))], toBase62(i+1000), i)
-	},
-	func(i int64) string {
-		slugs := []string{"understanding-kafka-internals", "raft-consensus-explained", "postgres-vs-mysql-in-2024", "building-a-url-shortener", "redis-data-structures-cheatsheet"}
-		return fmt.Sprintf("https://medium.com/@author%d/%s-%d", i%200, slugs[i%int64(len(slugs))], i)
-	},
-	func(i int64) string {
-		slugs := []string{"go-generics-in-practice", "k8s-networking-deep-dive", "lsm-tree-vs-b-tree"}
-		return fmt.Sprintf("https://dev.to/user%d/%s-%d", i%300, slugs[i%int64(len(slugs))], i)
-	},
-	func(i int64) string {
-		sections := []string{"technology", "science", "business", "world"}
-		return fmt.Sprintf("https://www.nytimes.com/2024/03/28/%s/article-%d.html", sections[i%int64(len(sections))], i)
-	},
-	func(i int64) string {
-		articles := []string{"Raft_(algorithm)", "Apache_Kafka", "B-tree", "CAP_theorem", "Consistent_hashing", "Bloom_filter"}
-		return fmt.Sprintf("https://en.wikipedia.org/wiki/%s", articles[i%int64(len(articles))])
-	},
-	func(i int64) string {
-		return fmt.Sprintf("https://x.com/user%d/status/%d", i%500, 1700000000000+i*1234567)
-	},
+var realURLs = []string{
+	// ── GitHub ──────────────────────────────────────────────
+	"https://github.com/golang/go",
+	"https://github.com/gin-gonic/gin",
+	"https://github.com/redis/go-redis",
+	"https://github.com/jackc/pgx",
+	"https://github.com/segmentio/kafka-go",
+	"https://github.com/kubernetes/kubernetes",
+	"https://github.com/moby/moby",
+	"https://github.com/cli/cli",
+	"https://github.com/anthropics/anthropic-sdk-go",
+	"https://github.com/neovim/neovim",
+	"https://github.com/torvalds/linux",
+	"https://github.com/microsoft/vscode",
+
+	// ── Go docs ──────────────────────────────────────────────
+	"https://go.dev/tour/welcome/1",
+	"https://go.dev/blog/context",
+	"https://go.dev/blog/concurrency-is-not-parallelism",
+	"https://go.dev/blog/pipelines",
+	"https://go.dev/blog/laws-of-reflection",
+	"https://go.dev/blog/error-handling-and-go",
+	"https://pkg.go.dev/context",
+	"https://pkg.go.dev/sync",
+	"https://pkg.go.dev/net/http",
+
+	// ── YouTube ──────────────────────────────────────────────
+	"https://www.youtube.com/watch?v=oV9rvDllKEg", // Go concurrency patterns — Rob Pike
+	"https://www.youtube.com/watch?v=f6kdp27TYZs", // Kafka in 6 minutes
+	"https://www.youtube.com/watch?v=LjoXhSMvAKE", // Redis crash course
+	"https://www.youtube.com/watch?v=HyWYpM_S-2c", // Raft distributed consensus
+	"https://www.youtube.com/watch?v=vLDAMKoqkQE", // Designing data-intensive apps
+	"https://www.youtube.com/watch?v=U9mJuokhRAE", // System design interview
+
+	// ── jialin00.com ────────────────────────────────────────
+	"https://jialin00.com",
+	"https://sd.jialin00.com",
+
+	// ── dev.to ───────────────────────────────────────────────
+	"https://dev.to/ben/what-s-a-webhook-5bj",
+	"https://dev.to/thegeoffstevens/go-vs-rust-which-is-better-for-systems-programming-4fmb",
+	"https://dev.to/gveloper/why-i-switched-from-python-to-go-2hoo",
+
+	// ── Wikipedia: CS concepts ───────────────────────────────
+	"https://en.wikipedia.org/wiki/Raft_(algorithm)",
+	"https://en.wikipedia.org/wiki/Apache_Kafka",
+	"https://en.wikipedia.org/wiki/B-tree",
+	"https://en.wikipedia.org/wiki/CAP_theorem",
+	"https://en.wikipedia.org/wiki/Consistent_hashing",
+	"https://en.wikipedia.org/wiki/Bloom_filter",
+	"https://en.wikipedia.org/wiki/Paxos_(computer_science)",
+
+	// ── Wikipedia: movies ────────────────────────────────────
+	"https://en.wikipedia.org/wiki/Oppenheimer_(film)",
+	"https://en.wikipedia.org/wiki/Dune_(2021_film)",
+	"https://en.wikipedia.org/wiki/Interstellar_(film)",
+	"https://en.wikipedia.org/wiki/Everything_Everywhere_All_at_Once",
+	"https://en.wikipedia.org/wiki/Parasite_(2019_film)",
+	"https://en.wikipedia.org/wiki/The_Shawshank_Redemption",
+	"https://en.wikipedia.org/wiki/Spirited_Away",
+
+	// ── Letterboxd ───────────────────────────────────────────
+	"https://letterboxd.com/film/oppenheimer-2023/",
+	"https://letterboxd.com/film/dune-2021/",
+	"https://letterboxd.com/film/interstellar/",
+	"https://letterboxd.com/film/parasite-2019/",
+	"https://letterboxd.com/film/everything-everywhere-all-at-once/",
 }
 
 func randomLongURL(i int64) string {
-	return urlTemplates[i%int64(len(urlTemplates))](i)
+	return realURLs[i%int64(len(realURLs))]
 }
 
 // claimRange atomically claims [start, end) from the coordinator row.
