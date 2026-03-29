@@ -65,6 +65,9 @@ func main() {
 	}
 	log.Printf("loaded %d keys from DB", len(ks.all))
 
+	// ptr is swapped atomically every 30s by the background goroutine.
+	// 	startup:  ptr → ks   (initial load)
+	// 	+30s:     ptr → next (new load, ks unreferenced → GC'd)
 	var ptr atomic.Pointer[keySet]
 	ptr.Store(ks)
 
@@ -89,6 +92,13 @@ func main() {
 	}
 
 	var wg sync.WaitGroup
+	// semaphore: buffered channel of size `concurrency`.
+	// Sending blocks when full, so at most `concurrency` goroutines run at once.
+	// Each goroutine releases its slot on exit, allowing the next one in.
+	//
+	//   i=0..49:  50 goroutines in flight simultaneously
+	//   i=50:     channel full → main blocks until a goroutine finishes and reads from channel
+	//   i=51:     slot freed → next goroutine starts
 	semaphore := make(chan struct{}, concurrency)
 
 	log.Println("traffic running continuously, Ctrl+C to stop")
