@@ -50,8 +50,6 @@ func loadKeys(ctx context.Context, pool *pgxpool.Pool) *keySet {
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-
 	pool, err := pgxpool.New(context.Background(), "postgres://user:password@127.0.0.1:5433/urlshortener?sslmode=disable")
 	if err != nil {
 		log.Fatal(err)
