@@ -6,8 +6,8 @@
 # First time setup: start infra, create schema, seed data.
 setup: infra-up db-init ch-init seed
 
-# Re-run: clear data (keep schema), seed fresh batch, simulate traffic.
-rerun: db-reset seed traffic
+# Re-run: clear data (keep schema), seed fresh batch. Run make traffic separately.
+rerun: db-reset seed
 
 # ── Infra ──────────────────────────────────────────────────────────
 infra-up:
