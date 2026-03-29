@@ -89,7 +89,7 @@ func main() {
 	}
 
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, concurrency)
+	semaphore := make(chan struct{}, concurrency)
 
 	log.Println("traffic running continuously, Ctrl+C to stop")
 	total := 0
@@ -97,10 +97,10 @@ func main() {
 		start := time.Now()
 		for i := 0; i < requests; i++ {
 			wg.Add(1)
-			sem <- struct{}{}
+			semaphore <- struct{}{}
 			go func() {
 				defer wg.Done()
-				defer func() { <-sem }()
+				defer func() { <-semaphore }()
 
 				cur := ptr.Load()
 				var shortKey string
