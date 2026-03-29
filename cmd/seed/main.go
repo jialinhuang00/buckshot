@@ -141,7 +141,7 @@ func main() {
 	}
 	defer pool.Close()
 
-	rdb := redis.NewClient(&redis.Options{Addr: "localhost:6380"})
+	rdb := redis.NewClient(&redis.Options{Addr: "localhost:6380", PoolSize: 3})
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		log.Fatal("redis ping failed:", err)
 	}
