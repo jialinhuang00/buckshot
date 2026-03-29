@@ -16,10 +16,11 @@ type ShortenHandler struct {
 	pg      *store.PGStore
 	redis   *store.RedisStore
 	counter *keygen.Counter
+	baseURL string
 }
 
-func NewShortenHandler(pg *store.PGStore, redis *store.RedisStore, counter *keygen.Counter) *ShortenHandler {
-	return &ShortenHandler{pg: pg, redis: redis, counter: counter}
+func NewShortenHandler(pg *store.PGStore, redis *store.RedisStore, counter *keygen.Counter, baseURL string) *ShortenHandler {
+	return &ShortenHandler{pg: pg, redis: redis, counter: counter, baseURL: baseURL}
 }
 
 func (h *ShortenHandler) Handle(c *gin.Context) {
@@ -46,6 +47,6 @@ func (h *ShortenHandler) Handle(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{
 		"short_key": shortKey,
-		"short_url": "http://localhost:8080/" + shortKey,
+		"short_url": h.baseURL + "/" + shortKey,
 	})
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"time"
+	"url-shortener-demo/internal/config"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/segmentio/kafka-go"
@@ -31,7 +32,7 @@ type row struct {
 
 func main() {
 	ch, err := clickhouse.Open(&clickhouse.Options{
-		Addr: []string{"localhost:9000"},
+		Addr: []string{config.ClickHouseAddr()},
 		Auth: clickhouse.Auth{Database: "default"},
 	})
 	if err != nil {
@@ -39,7 +40,7 @@ func main() {
 	}
 
 	r := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  []string{"localhost:9092"},
+		Brokers:  []string{config.KafkaAddr()},
 		Topic:    "click-events",
 		GroupID:  "analytics-consumer",
 		MinBytes: 1,

@@ -7,6 +7,7 @@ import (
 	"flag"
 	"log"
 	"math/rand"
+	"url-shortener-demo/internal/config"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -161,13 +162,13 @@ func main() {
 
 	ctx := context.Background()
 
-	pool, err := pgxpool.New(ctx, "postgres://user:password@127.0.0.1:5433/urlshortener?sslmode=disable")
+	pool, err := pgxpool.New(ctx, config.PostgresDSN())
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer pool.Close()
 
-	rdb := redis.NewClient(&redis.Options{Addr: "localhost:6380", PoolSize: 3})
+	rdb := redis.NewClient(&redis.Options{Addr: config.RedisAddr(), PoolSize: 3})
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		log.Fatal("redis ping failed:", err)
 	}

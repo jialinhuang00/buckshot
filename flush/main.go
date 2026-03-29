@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"time"
+	"url-shortener-demo/internal/config"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -13,9 +14,9 @@ import (
 // Runs every 30 seconds.
 
 func main() {
-	rdb := redis.NewClient(&redis.Options{Addr: "localhost:6380"})
+	rdb := redis.NewClient(&redis.Options{Addr: config.RedisAddr()})
 
-	pool, err := pgxpool.New(context.Background(), "postgres://user:password@127.0.0.1:5433/urlshortener?sslmode=disable")
+	pool, err := pgxpool.New(context.Background(), config.PostgresDSN())
 	if err != nil {
 		log.Fatal("postgres:", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"url-shortener-demo/internal/config"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -15,7 +16,6 @@ import (
 const (
 	concurrency = 50
 	requests    = 10_000
-	baseURL     = "http://localhost:8080"
 	reloadEvery = 30 * time.Second
 )
 
@@ -53,7 +53,7 @@ func loadKeys(ctx context.Context, pool *pgxpool.Pool) *keySet {
 }
 
 func main() {
-	pool, err := pgxpool.New(context.Background(), "postgres://user:password@127.0.0.1:5433/urlshortener?sslmode=disable")
+	pool, err := pgxpool.New(context.Background(), config.PostgresDSN())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func main() {
 					shortKey = cur.all[rand.Intn(len(cur.all))]
 				}
 
-				resp, err := client.Get(baseURL + "/" + shortKey)
+				resp, err := client.Get(config.ShortenerBaseURL() + "/" + shortKey)
 				if err != nil {
 					return
 				}
