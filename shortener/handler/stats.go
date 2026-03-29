@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"time"
 	"url-shortener-demo/shortener/store"
 
@@ -48,6 +49,9 @@ func (h *StatsHandler) List(c *gin.Context) {
 		e.TotalClicks += delta
 		result = append(result, e)
 	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].TotalClicks > result[j].TotalClicks
+	})
 	c.JSON(http.StatusOK, result)
 }
 
