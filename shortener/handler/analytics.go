@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"url-shortener-demo/shortener/store"
 
@@ -46,7 +47,9 @@ func (h *AnalyticsHandler) Data(c *gin.Context) {
 		}
 		rows, err := h.pool.Query(ctx,
 			`SELECT short_key, long_url FROM url_mappings WHERE short_key = ANY($1)`, keys)
-		if err == nil {
+		if err != nil {
+			log.Printf("analytics: long_url lookup failed: %v", err)
+		} else {
 			urlMap := map[string]string{}
 			for rows.Next() {
 				var sk, lu string

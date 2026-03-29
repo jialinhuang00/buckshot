@@ -73,7 +73,7 @@ seed-parallel:
 	docker exec -i url-shortener-demo-postgres-1 psql -U user -d urlshortener -c \
 		"UPDATE seed_ranges SET total = next_start + 50000;"
 	go build -o /tmp/seed-bin ./cmd/seed/...
-	/tmp/seed-bin & /tmp/seed-bin & /tmp/seed-bin & wait
+	/tmp/seed-bin & P1=$$!; /tmp/seed-bin & P2=$$!; /tmp/seed-bin & P3=$$!; trap "kill $$P1 $$P2 $$P3 2>/dev/null" INT TERM; wait
 
 traffic:
 	go run ./cmd/traffic/...
