@@ -97,21 +97,26 @@ make traffic       # simulate continuous skewed click traffic (Ctrl+C to stop)
 | `Makefile` | All commands |
 | `scripts/init.sql` | PostgreSQL schema + seed_ranges coordinator |
 | `scripts/init_clickhouse.sql` | ClickHouse schema |
-| `shortener/main.go` | API entry point |
+| `cmd/shortener/main.go` | API entry point |
+| `cmd/consumer/main.go` | Kafka consumer → ClickHouse |
+| `cmd/flush/main.go` | Redis INCR flush → PostgreSQL every 5s |
+| `cmd/seed/main.go` | Distributed seed — workers claim ranges from seed_ranges |
+| `cmd/traffic/main.go` | Continuous traffic simulation (80/20 Zipf-like, reloads keys every 30s) |
+| `internal/config/config.go` | Centralized addrs/ports for PG / Redis / Kafka / ClickHouse |
 | `shortener/hub/hub.go` | SSE broadcast hub — pushes clicked key to all clients |
+| `shortener/handler/shorten.go` | POST /shorten |
+| `shortener/handler/redirect.go` | GET /:key — bloom → cache → PG → INCR → Kafka → 302 |
 | `shortener/handler/stream.go` | GET /stream — SSE endpoint for real-time dashboard |
 | `shortener/handler/dashboard.go` | Serves static dashboard HTML |
 | `shortener/handler/analytics.go` | GET /analytics, GET /analytics/data |
 | `shortener/handler/stats.go` | GET /stats, GET /stats/:key, GET /stats/:key/stream |
-| `shortener/store/clickhouse.go` | ClickHouse queries (clicks/interval, top keys, device split) |
+| `shortener/store/postgres.go` | PG connection + queries (mappings, stats) |
 | `shortener/store/redis.go` | Cache + Bloom filter (bitset) + INCR |
+| `shortener/store/kafka.go` | Kafka producer (click-events) |
+| `shortener/store/clickhouse.go` | ClickHouse queries (clicks/interval, top keys, device split) |
 | `shortener/keygen/counter.go` | DB-backed atomic counter → base62 |
 | `shortener/static/dashboard.html` | Dashboard UI (chips / bar / rows, SSE-driven) |
 | `shortener/static/analytics.html` | Analytics UI (clicks/interval, top 10, device split) |
-| `consumer/main.go` | Kafka consumer → ClickHouse |
-| `flush/main.go` | Redis INCR flush → PostgreSQL every 5s |
-| `cmd/seed/main.go` | Distributed seed — workers claim ranges from seed_ranges |
-| `cmd/traffic/main.go` | Continuous traffic simulation (80/20 Zipf-like, reloads keys every 30s) |
 
 ## Architecture
 

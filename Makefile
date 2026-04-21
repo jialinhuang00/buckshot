@@ -41,13 +41,13 @@ db-prune:
 
 # ── Run services ───────────────────────────────────────────────────
 run-shortener:
-	go run ./shortener/...
+	go run ./cmd/shortener/
 
 run-consumer:
-	go run ./consumer/...
+	go run ./cmd/consumer/
 
 run-flush:
-	go run ./flush/...
+	go run ./cmd/flush/
 
 # ── Seed & traffic ─────────────────────────────────────────────────
 seed:
@@ -68,9 +68,9 @@ traffic:
 
 # ── Build ──────────────────────────────────────────────────────────
 build:
-	go build -o bin/shortener ./shortener/...
-	go build -o bin/consumer ./consumer/...
-	go build -o bin/flush ./flush/...
+	go build -o bin/shortener ./cmd/shortener/
+	go build -o bin/consumer ./cmd/consumer/
+	go build -o bin/flush ./cmd/flush/
 
 # ── Test ───────────────────────────────────────────────────────────
 test-shorten:
