@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"url-shortener-demo/internal/config"
@@ -25,6 +26,7 @@ type ClickEvent struct {
 const (
 	batchSize    = 500
 	batchTimeout = 2 * time.Second
+	numWriters   = 4
 )
 
 type row struct {
@@ -57,9 +59,13 @@ func main() {
 		MaxWait:  1 * time.Second,
 	})
 
-	log.Println("consumer running, waiting for click events...")
+	log.Printf("consumer running, %d parallel writers, batch=%d, timeout=%s",
+		numWriters, batchSize, batchTimeout)
 
 	rows := make(chan row, batchSize*4)
+	batchCh := make(chan []row, numWriters*2)
+
+	// Reader goroutine: Kafka → rows
 	go func() {
 		defer close(rows)
 		for {
@@ -91,50 +97,79 @@ func main() {
 		}
 	}()
 
-	flush := func(batch []row) {
-		if len(batch) == 0 {
-			return
-		}
-		b, err := ch.PrepareBatch(context.Background(),
-			`INSERT INTO click_events (short_key, ts, ip, device)`)
-		if err != nil {
-			log.Println("prepare batch error:", err)
-			return
-		}
-		for _, r := range batch {
-			if err := b.Append(r.shortKey, r.ts, r.ip, r.device); err != nil {
-				log.Println("append error:", err)
-			}
-		}
-		if err := b.Send(); err != nil {
-			log.Println("batch send error:", err)
-			return
-		}
-		log.Printf("flushed %d events to clickhouse", len(batch))
-	}
+	// Batcher goroutine: rows → batchCh
+	go func() {
+		defer close(batchCh)
+		batch := make([]row, 0, batchSize)
+		ticker := time.NewTicker(batchTimeout)
+		defer ticker.Stop()
 
-	batch := make([]row, 0, batchSize)
-	ticker := time.NewTicker(batchTimeout)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case row, ok := <-rows:
-			if !ok {
-				flush(batch)
-				_ = r.Close()
-				log.Println("consumer: drained, clean exit")
+		send := func() {
+			if len(batch) == 0 {
 				return
 			}
-			batch = append(batch, row)
-			if len(batch) >= batchSize {
-				flush(batch)
-				batch = batch[:0]
-				ticker.Reset(batchTimeout)
-			}
-		case <-ticker.C:
-			flush(batch)
+			out := make([]row, len(batch))
+			copy(out, batch)
 			batch = batch[:0]
+			select {
+			case batchCh <- out:
+			case <-ctx.Done():
+			}
+		}
+
+		for {
+			select {
+			case row, ok := <-rows:
+				if !ok {
+					send() // final partial batch
+					return
+				}
+				batch = append(batch, row)
+				if len(batch) >= batchSize {
+					send()
+					ticker.Reset(batchTimeout)
+				}
+			case <-ticker.C:
+				send()
+			}
+		}
+	}()
+
+	// N writer goroutines: batchCh → ClickHouse
+	var wg sync.WaitGroup
+	for i := 0; i < numWriters; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for batch := range batchCh {
+				flush(ch, batch, id)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	_ = r.Close()
+	log.Println("consumer: drained, clean exit")
+}
+
+func flush(ch clickhouse.Conn, batch []row, writerID int) {
+	if len(batch) == 0 {
+		return
+	}
+	b, err := ch.PrepareBatch(context.Background(),
+		`INSERT INTO click_events (short_key, ts, ip, device)`)
+	if err != nil {
+		log.Printf("[w%d] prepare batch error: %v", writerID, err)
+		return
+	}
+	for _, r := range batch {
+		if err := b.Append(r.shortKey, r.ts, r.ip, r.device); err != nil {
+			log.Printf("[w%d] append error: %v", writerID, err)
 		}
 	}
+	if err := b.Send(); err != nil {
+		log.Printf("[w%d] batch send error: %v", writerID, err)
+		return
+	}
+	log.Printf("[w%d] flushed %d events", writerID, len(batch))
 }

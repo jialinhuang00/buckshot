@@ -50,7 +50,7 @@ browser  → shortener(:8080) → ClickHouse(:8123)
 shortener is the sole entry point. consumer and flush are background workers — no HTTP, self-scheduled, run until process dies.
 
 - flush:    ticker-driven — wakes every 5s regardless of traffic
-- consumer: hybrid — event-driven (rows channel) for throughput + ticker-driven (2s) as timeout flush
+- consumer: hybrid — event-driven (rows channel) for throughput + ticker-driven (2s) as timeout flush; 4 parallel CH writers
 
 ```
 shortener:  start → connect PG + Redis + Kafka + ClickHouse → serve HTTP :8080
@@ -69,7 +69,8 @@ shortener:  start → connect PG + Redis + Kafka + ClickHouse → serve HTTP :80
 
 consumer:   start → connect Kafka + ClickHouse → read click-events topic
   goroutine: ReadMessage → parse JSON → detect device → rows channel
-  main loop: select rows (batch up to 500) | ticker 2s → PrepareBatch → Append × N → Send → ClickHouse
+  batcher: select rows (batch up to 500) | ticker 2s → push complete batch to batchCh
+  writers (×4): for batch := range batchCh → PrepareBatch → Append × N → Send → ClickHouse
   note: PrepareBatch uses ClickHouse native binary protocol (TCP :9000), not text SQL.
         INSERT header sent once; Append streams rows as binary blocks; Send finalizes.
         Not valid in PostgreSQL — ClickHouse-specific.
