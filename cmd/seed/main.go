@@ -2,22 +2,15 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"flag"
 	"log"
 	"math/rand"
 	"url-shortener-demo/internal/config"
+	"url-shortener-demo/shortener/store"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
-)
-
-const (
-	bloomKey    = "bloom:urls"
-	bloomSize   = 1_000_000
-	bloomHashes = 5
 )
 
 const base62Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
@@ -168,8 +161,8 @@ func main() {
 	}
 	defer pool.Close()
 
-	rdb := redis.NewClient(&redis.Options{Addr: config.RedisAddr(), PoolSize: 3})
-	if err := rdb.Ping(ctx).Err(); err != nil {
+	rs := store.NewRedisStore(config.RedisAddr())
+	if err := rs.Ping(ctx); err != nil {
 		log.Fatal("redis ping failed:", err)
 	}
 
@@ -196,29 +189,12 @@ func main() {
 				continue
 			}
 
-			bloomAdd(ctx, rdb, shortKey)
+			if err := rs.BloomAdd(ctx, shortKey); err != nil {
+				log.Printf("bloom add %s: %v", shortKey, err)
+			}
 		}
 
 		total += end - start
 		log.Printf("inserted %d so far", total)
-	}
-}
-
-func bloomAdd(ctx context.Context, rdb *redis.Client, key string) {
-	h := sha256.Sum256([]byte(key))
-	pipe := rdb.Pipeline()
-	for i := 0; i < bloomHashes; i++ {
-		offset := i * 4
-		var val int64
-		for j := 0; j < 8; j++ {
-			val = val<<8 | int64(h[(offset+j)%32])
-		}
-		if val < 0 {
-			val = -val
-		}
-		pipe.SetBit(ctx, bloomKey, val%bloomSize, 1)
-	}
-	if _, err := pipe.Exec(ctx); err != nil {
-		log.Printf("bloom pipeline error: %v", err)
 	}
 }
