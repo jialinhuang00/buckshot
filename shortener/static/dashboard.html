@@ -264,16 +264,29 @@
     ).join('');
   }
 
-  // ── SSE: per-click update ──────────────────────────────────
+  // ── SSE: per-click update (throttled) ──────────────────────
+  // SSE may push 1000+ events/sec under load. Direct DOM update
+  // per event freezes the browser. Accumulate in `pending` and
+  // flush every 100ms to bound DOM mutations to ~10/sec/key.
+  let pending = {};
+  setInterval(() => {
+    let touched = false;
+    for (const key in pending) {
+      if (!counts.hasOwnProperty(key)) { delete pending[key]; continue; }
+      counts[key] += pending[key];
+      updateChip(key);
+      updateRow(key);
+      touched = true;
+    }
+    if (touched) pending = {};
+  }, 100);
+
   function startStream() {
     if (streamEs) streamEs.close();
     streamEs = new EventSource('/stream');
     streamEs.onmessage = e => {
       const key = e.data.trim();
-      if (!counts.hasOwnProperty(key)) return;
-      counts[key]++;
-      updateChip(key);
-      updateRow(key);
+      pending[key] = (pending[key] || 0) + 1;
     };
   }
 
