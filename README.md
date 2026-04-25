@@ -48,8 +48,8 @@ Override by exporting env vars before starting services:
 ## Reset
 
 ```bash
-make down       # graceful kill all Go binaries (SIGTERM, then SIGKILL stragglers)
-make db-prune   # drop PG/CH tables, FLUSHALL Redis, recreate Kafka topic + schemas
+make run-all-down  # graceful kill all run-* Go binaries (SIGTERM, then SIGKILL stragglers)
+make db-prune      # drop PG/CH tables, FLUSHALL Redis, recreate Kafka topic + schemas
 ```
 
-`make down` doesn't touch Docker infra. To stop infra too: `make infra-down`.
+`make run-all-down` doesn't touch Docker infra. To stop infra too: `make infra-down`.

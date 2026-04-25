@@ -1,6 +1,6 @@
 # URL Shortener Demo — command reference
 
-.PHONY: setup infra-up infra-down infra-status db-init db-shell ch-init db-prune run-shortener run-consumer run-flush seed seed-parallel mimic build down test-shorten test-redirect
+.PHONY: setup infra-up infra-down infra-status db-init db-shell ch-init db-prune run-shortener run-consumer run-flush run-all-down seed seed-parallel mimic build test-shorten test-redirect
 
 # ── Workflows ──────────────────────────────────────────────────────
 # First time setup: start infra, create schema, seed data.
@@ -72,10 +72,10 @@ build:
 	go build -o bin/consumer ./cmd/consumer/
 	go build -o bin/flush ./cmd/flush/
 
-# ── Down ───────────────────────────────────────────────────────────
+# ── Stop running services ──────────────────────────────────────────
 # Send SIGTERM to all running cmd/* binaries (graceful), wait 5s,
 # then SIGKILL any stragglers. Doesn't touch docker infra.
-down:
+run-all-down:
 	@pids=$$(ps aux | grep -E "go-build.*(shortener|consumer|flush|mimic|seed)" | grep -v grep | awk '{print $$2}'); \
 	if [ -z "$$pids" ]; then echo "nothing to stop"; exit 0; fi; \
 	echo "SIGTERM: $$pids"; kill $$pids 2>/dev/null || true; \
