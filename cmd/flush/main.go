@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 	"url-shortener-demo/internal/config"
 
@@ -11,25 +14,40 @@ import (
 )
 
 // Flush periodically drains Redis INCR click counters into PostgreSQL url_stats.
-// Runs every 30 seconds.
+// Runs every 5 seconds.
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(),
+		os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	rdb := redis.NewClient(&redis.Options{Addr: config.RedisAddr()})
+	defer rdb.Close()
 
 	pool, err := pgxpool.New(context.Background(), config.PostgresDSN())
 	if err != nil {
 		log.Fatal("postgres:", err)
 	}
+	defer pool.Close()
 
 	log.Println("flush worker running, interval: 5s")
 	ticker := time.NewTicker(5 * time.Second)
-	for range ticker.C {
-		flush(context.Background(), rdb, pool)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("flush: final drain before exit")
+			flush(context.Background(), rdb, pool)
+			log.Println("flush: clean exit")
+			return
+		case <-ticker.C:
+			flush(ctx, rdb, pool)
+		}
 	}
 }
 
 func flush(ctx context.Context, rdb *redis.Client, pool *pgxpool.Pool) {
-	// Scan all clicks:* keys
 	var cursor uint64
 	for {
 		keys, next, err := rdb.Scan(ctx, cursor, "clicks:*", 100).Result()
@@ -41,13 +59,11 @@ func flush(ctx context.Context, rdb *redis.Client, pool *pgxpool.Pool) {
 		for _, key := range keys {
 			shortKey := key[len("clicks:"):]
 
-			// Atomic get-and-delete
 			val, err := rdb.GetDel(ctx, key).Int64()
 			if err != nil || val == 0 {
 				continue
 			}
 
-			// Upsert into url_stats
 			_, err = pool.Exec(ctx,
 				`INSERT INTO url_stats (short_key, total_clicks)
 				 VALUES ($1, $2)

@@ -30,6 +30,8 @@ func NewKafkaProducer(broker, topic string) *KafkaProducer {
 	}
 }
 
+func (k *KafkaProducer) Close() error { return k.writer.Close() }
+
 // Publish sends a click event fire-and-forget (does not block redirect).
 func (k *KafkaProducer) Publish(event ClickEvent) {
 	b, err := json.Marshal(event)

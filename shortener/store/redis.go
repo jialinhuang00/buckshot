@@ -84,6 +84,8 @@ func (r *RedisStore) Ping(ctx context.Context) error {
 	return r.rdb.Ping(ctx).Err()
 }
 
+func (r *RedisStore) Close() error { return r.rdb.Close() }
+
 // BloomCheck returns true if key MIGHT exist (could be false positive),
 // false if key DEFINITELY does not exist.
 func (r *RedisStore) BloomCheck(ctx context.Context, shortKey string) (bool, error) {

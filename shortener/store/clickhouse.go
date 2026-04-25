@@ -21,6 +21,8 @@ func NewClickHouseStore(addr string) (*ClickHouseStore, error) {
 	return &ClickHouseStore{conn: conn}, nil
 }
 
+func (s *ClickHouseStore) Close() error { return s.conn.Close() }
+
 type HourlyClick struct {
 	Hour   string `json:"hour"`
 	Clicks uint64 `json:"clicks"`

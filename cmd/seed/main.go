@@ -6,6 +6,9 @@ import (
 	"flag"
 	"log"
 	"math/rand"
+	"os"
+	"os/signal"
+	"syscall"
 	"url-shortener-demo/internal/config"
 	"url-shortener-demo/shortener/store"
 
@@ -153,7 +156,9 @@ func main() {
 	batch := flag.Int64("batch", 1000, "IDs to claim per round")
 	flag.Parse()
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(),
+		os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	pool, err := pgxpool.New(ctx, config.PostgresDSN())
 	if err != nil {
@@ -162,12 +167,17 @@ func main() {
 	defer pool.Close()
 
 	rs := store.NewRedisStore(config.RedisAddr())
+	defer rs.Close()
 	if err := rs.Ping(ctx); err != nil {
 		log.Fatal("redis ping failed:", err)
 	}
 
 	total := int64(0)
 	for {
+		if ctx.Err() != nil {
+			log.Printf("seed canceled, total inserted: %d", total)
+			return
+		}
 		start, end, ok := claimRange(ctx, pool, *batch)
 		if !ok {
 			log.Printf("no more work — done. total inserted: %d", total)
@@ -177,6 +187,9 @@ func main() {
 		log.Printf("claiming range [%d, %d)", start, end)
 
 		for i := start; i < end; i++ {
+			if ctx.Err() != nil {
+				break
+			}
 			shortKey := randomShortKey(i)
 			longURL := randomLongURL(i)
 

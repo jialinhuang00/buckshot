@@ -5,8 +5,11 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
+	"os/signal"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 	"url-shortener-demo/internal/config"
 
@@ -53,35 +56,40 @@ func loadKeys(ctx context.Context, pool *pgxpool.Pool) *keySet {
 }
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(),
+		os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	pool, err := pgxpool.New(context.Background(), config.PostgresDSN())
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer pool.Close()
 
-	ks := loadKeys(context.Background(), pool)
+	ks := loadKeys(ctx, pool)
 	if ks == nil {
 		log.Fatal("no keys found — run make seed first")
 	}
 	log.Printf("loaded %d keys from DB", len(ks.all))
 
-	// ptr is swapped atomically every 30s by the background goroutine.
-	// 	startup:  ptr → ks   (initial load)
-	// 	+30s:     ptr → next (new load, ks unreferenced → GC'd)
 	var ptr atomic.Pointer[keySet]
 	ptr.Store(ks)
 
-	// background reload
 	go func() {
 		ticker := time.NewTicker(reloadEvery)
 		defer ticker.Stop()
-		for range ticker.C {
-			next := loadKeys(context.Background(), pool)
-			if next == nil {
-				continue
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				next := loadKeys(ctx, pool)
+				if next == nil {
+					continue
+				}
+				ptr.Store(next)
+				log.Printf("reloaded keys: %d total", len(next.all))
 			}
-			ptr.Store(next)
-			log.Printf("reloaded keys: %d total", len(next.all))
 		}
 	}()
 
@@ -92,22 +100,20 @@ func main() {
 	}
 
 	var wg sync.WaitGroup
-	// semaphore: buffered channel of size `concurrency`.
-	// Sending blocks when full, so at most `concurrency` goroutines run at once.
-	// Each goroutine releases its slot on exit, allowing the next one in.
-	//
-	//   i=0..49:  50 goroutines in flight simultaneously
-	//   i=50:     channel full → main blocks until a goroutine finishes and reads from channel
-	//   i=51:     slot freed → next goroutine starts
 	semaphore := make(chan struct{}, concurrency)
 
 	log.Println("mimic running continuously, Ctrl+C to stop")
 	total := 0
+outer:
 	for {
 		start := time.Now()
 		for i := 0; i < requests; i++ {
+			select {
+			case semaphore <- struct{}{}:
+			case <-ctx.Done():
+				break outer
+			}
 			wg.Add(1)
-			semaphore <- struct{}{}
 			go func() {
 				defer wg.Done()
 				defer func() { <-semaphore }()
@@ -120,7 +126,12 @@ func main() {
 					shortKey = cur.all[rand.Intn(len(cur.all))]
 				}
 
-				resp, err := client.Get(config.ShortenerBaseURL() + "/" + shortKey)
+				req, err := http.NewRequestWithContext(ctx, "GET",
+					config.ShortenerBaseURL()+"/"+shortKey, nil)
+				if err != nil {
+					return
+				}
+				resp, err := client.Do(req)
 				if err != nil {
 					return
 				}
@@ -132,4 +143,7 @@ func main() {
 		elapsed := time.Since(start)
 		log.Printf("batch done: %d total | %.0f req/s", total, float64(requests)/elapsed.Seconds())
 	}
+	log.Println("mimic: waiting for in-flight requests...")
+	wg.Wait()
+	log.Println("mimic: clean exit")
 }

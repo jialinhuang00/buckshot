@@ -19,6 +19,8 @@ func NewPGStore(dsn string) (*PGStore, error) {
 
 func (s *PGStore) Pool() *pgxpool.Pool { return s.pool }
 
+func (s *PGStore) Close() { s.pool.Close() }
+
 func (s *PGStore) Save(ctx context.Context, shortKey, longURL string) error {
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO url_mappings (short_key, long_url) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
