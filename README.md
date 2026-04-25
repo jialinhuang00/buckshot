@@ -16,15 +16,20 @@ Real-time dashboard via SSE. Analytics via ClickHouse aggregation.
 git clone ...
 cd url-shortener-demo
 
-make setup         # start Docker infra + init schemas
-make run-shortener # terminal 1 — API on :8080
-make run-consumer  # terminal 2 — Kafka → ClickHouse
-make run-flush     # terminal 3 — Redis → PostgreSQL every 5s
-make seed          # seed 50,000 URLs
-make mimic         # simulate click traffic (Ctrl+C to stop)
+make setup         # T0 — start Docker infra + init schemas (one-shot)
+make run-shortener # T1 — API on :8080  (long-running)
+make run-consumer  # T2 — Kafka → ClickHouse  (long-running)
+make run-flush     # T3 — Redis → PG every 5s  (long-running)
+
+# T4 — utilities, run sequentially
+make seed          #   seed 50,000 URLs (one-shot, completes in seconds)
+make mimic         #   simulate click traffic — needs shortener up (Ctrl+C to stop)
 ```
 
 Open http://localhost:8080 for the dashboard, http://localhost:8080/analytics for analytics.
+
+**Minimum to demo a redirect**: `make setup` + `make run-shortener` + `make seed` + `curl :8080/<key>`.
+Other workers (consumer/flush) only enrich the dashboard/analytics views.
 
 ## Config
 
@@ -42,8 +47,9 @@ Override by exporting env vars before starting services:
 
 ## Reset
 
-Stop all services before resetting.
-
 ```bash
-make db-prune  # drop everything, recreate schema
+make down       # graceful kill all Go binaries (SIGTERM, then SIGKILL stragglers)
+make db-prune   # drop PG/CH tables, FLUSHALL Redis, recreate Kafka topic + schemas
 ```
+
+`make down` doesn't touch Docker infra. To stop infra too: `make infra-down`.
