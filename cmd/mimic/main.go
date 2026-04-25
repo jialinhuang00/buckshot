@@ -101,7 +101,7 @@ func main() {
 	//   i=51:     slot freed → next goroutine starts
 	semaphore := make(chan struct{}, concurrency)
 
-	log.Println("traffic running continuously, Ctrl+C to stop")
+	log.Println("mimic running continuously, Ctrl+C to stop")
 	total := 0
 	for {
 		start := time.Now()

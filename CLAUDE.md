@@ -20,7 +20,7 @@ Local URL shortener demo. Go + PostgreSQL + Redis + Kafka + ClickHouse.
 │  shortener   :8080   API + SSE + dashboard          │
 │  consumer    —       Kafka → ClickHouse             │
 │  flush       —       Redis → PostgreSQL             │
-│  traffic     —       打 shortener（模擬流量）        │
+│  mimic       —       打 shortener（模擬流量）        │
 │  seed        —       寫 PG + Redis（一次性）         │
 └─────────────────────────────────────────────────────┘
 ```
@@ -28,7 +28,7 @@ Local URL shortener demo. Go + PostgreSQL + Redis + Kafka + ClickHouse.
 Port offset: 本機已有 PG(:5432) 和 Redis(:6379)，Docker 映射到 5433 / 6380 避免衝突。
 
 ```
-traffic → shortener(:8080)
+mimic → shortener(:8080)
             ├── PG(:5433)      url_mappings, url_stats
             ├── Redis(:6380)   bloom, cache, INCR
             ├── Kafka(:9092)   click-events topic (Producer)
@@ -86,7 +86,7 @@ make run-shortener # start API (terminal 1)
 make run-consumer  # start Kafka consumer (terminal 2)
 make run-flush     # start flush worker (terminal 3)
 make seed          # seed 50,000 URLs (repeatable, auto-extends)
-make traffic       # simulate continuous skewed click traffic (Ctrl+C to stop)
+make mimic         # simulate continuous skewed click traffic (Ctrl+C to stop)
 ```
 
 ## Key files
@@ -101,7 +101,7 @@ make traffic       # simulate continuous skewed click traffic (Ctrl+C to stop)
 | `cmd/consumer/main.go` | Kafka consumer → ClickHouse |
 | `cmd/flush/main.go` | Redis INCR flush → PostgreSQL every 5s |
 | `cmd/seed/main.go` | Distributed seed — workers claim ranges from seed_ranges |
-| `cmd/traffic/main.go` | Continuous traffic simulation (80/20 Zipf-like, reloads keys every 30s) |
+| `cmd/mimic/main.go` | Continuous traffic simulation (80/20 Zipf-like, reloads keys every 30s) |
 | `internal/config/config.go` | Centralized addrs/ports for PG / Redis / Kafka / ClickHouse |
 | `shortener/hub/hub.go` | SSE broadcast hub — pushes clicked key to all clients |
 | `shortener/handler/shorten.go` | POST /shorten |
@@ -178,7 +178,7 @@ make db-prune   # DROP all PG tables + CH + Redis + Kafka topic, recreate schema
 
 Resets Kafka topic to avoid stale messages being re-consumed into fresh ClickHouse.
 
-**Stop consumer before resetting.** `kafka-go` buffers fetched messages in memory. If `run-consumer` is running during reset, buffered messages get written to the freshly-created ClickHouse — analytics will show stale data even before `make traffic` runs. Stop consumer first, restart after reset.
+**Stop consumer before resetting.** `kafka-go` buffers fetched messages in memory. If `run-consumer` is running during reset, buffered messages get written to the freshly-created ClickHouse — analytics will show stale data even before `make mimic` runs. Stop consumer first, restart after reset.
 
 ## Redis keys
 

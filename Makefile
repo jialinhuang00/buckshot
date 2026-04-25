@@ -1,6 +1,6 @@
 # URL Shortener Demo — command reference
 
-.PHONY: setup infra-up infra-down infra-status db-init db-shell ch-init db-prune run-shortener run-consumer run-flush seed seed-parallel traffic build test-shorten test-redirect
+.PHONY: setup infra-up infra-down infra-status db-init db-shell ch-init db-prune run-shortener run-consumer run-flush seed seed-parallel mimic build test-shorten test-redirect
 
 # ── Workflows ──────────────────────────────────────────────────────
 # First time setup: start infra, create schema, seed data.
@@ -49,7 +49,7 @@ run-consumer:
 run-flush:
 	go run ./cmd/flush/
 
-# ── Seed & traffic ─────────────────────────────────────────────────
+# ── Seed & mimic ───────────────────────────────────────────────────
 seed:
 	docker exec -i url-shortener-demo-postgres-1 psql -U user -d urlshortener -c \
 		"UPDATE seed_ranges SET total = next_start + 50000;"
@@ -63,8 +63,8 @@ seed-parallel:
 	go build -o /tmp/seed-bin ./cmd/seed/...
 	/tmp/seed-bin & P1=$$!; /tmp/seed-bin & P2=$$!; /tmp/seed-bin & P3=$$!; trap "kill $$P1 $$P2 $$P3 2>/dev/null" INT TERM; wait
 
-traffic:
-	go run ./cmd/traffic/...
+mimic:
+	go run ./cmd/mimic/...
 
 # ── Build ──────────────────────────────────────────────────────────
 build:

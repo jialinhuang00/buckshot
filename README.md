@@ -21,7 +21,7 @@ make run-shortener # terminal 1 — API on :8080
 make run-consumer  # terminal 2 — Kafka → ClickHouse
 make run-flush     # terminal 3 — Redis → PostgreSQL every 5s
 make seed          # seed 50,000 URLs
-make traffic       # simulate click traffic (Ctrl+C to stop)
+make mimic         # simulate click traffic (Ctrl+C to stop)
 ```
 
 Open http://localhost:8080 for the dashboard, http://localhost:8080/analytics for analytics.
