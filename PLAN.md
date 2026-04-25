@@ -2,7 +2,7 @@
 
 掃過 `cmd/*/main.go` 和 `shortener/store/*` 之後整理的待辦。按嚴重度排序。
 
-> **狀態**：Phase 1–3 完成，加上 consumer fan-out 跟 `make down`。剩 dashboard SSE throttle、可選的 GeoIP / MaxOpenConns 微調。
+> **狀態**：1–8 全部完成。剩可選的 GeoIP / MaxOpenConns 微調。
 
 ---
 
@@ -105,24 +105,17 @@ down:
 
 ---
 
-## 待辦
+## 8. ✅ Dashboard SSE throttle
 
-### 🔄 Dashboard SSE throttle（demo 易凍住）
+**完成於** `1fff729`
 
 **問題**：mimic 1000~3000 req/s 時 `/stream` 每個事件推 browser，DOM 重繪頻率 > 顯示卡能力 → 瀏覽器 freeze。
 
-**修法**：client-side 攢 100ms 才重繪一次。
+**做法**：client-side 攢 100ms 才重繪一次。`onmessage` 只 bump `pending[key]`，`setInterval` 每 100ms flush 到 DOM。DOM mutation 從 1000+/sec 降到 10/sec。
 
-```js
-let pending = {}
-streamEs.onmessage = e => { pending[e.data] = (pending[e.data] || 0) + 1 }
-setInterval(() => {
-  for (const k in pending) { counts[k] += pending[k]; redraw(k) }
-  pending = {}
-}, 100)
-```
+---
 
-DOM mutation 從 1000+/sec 降到 10/sec，流暢。
+## 待辦（可選）
 
 ### 🔄 ClickHouse `MaxOpenConns: 8`（小優化）
 
