@@ -17,6 +17,7 @@ git clone ...
 cd url-shortener-demo
 
 make setup         # T0 — start Docker infra + init schemas (one-shot)
+                   #      or `make ready` if you also want bin/ compiled
 make run-shortener # T1 — API on :8080  (long-running)
 make run-consumer  # T2 — Kafka → ClickHouse  (long-running)
 make run-flush     # T3 — Redis → PG every 5s  (long-running)

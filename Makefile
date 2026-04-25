@@ -1,10 +1,14 @@
 # URL Shortener Demo — command reference
 
-.PHONY: setup infra-up infra-down infra-status db-init db-shell ch-init db-prune run-shortener run-consumer run-flush run-all-down seed seed-parallel mimic build test-shorten test-redirect
+.PHONY: setup ready infra-up infra-down infra-status db-init db-shell ch-init db-prune run-shortener run-consumer run-flush run-all-down seed seed-parallel mimic build test-shorten test-redirect
 
 # ── Workflows ──────────────────────────────────────────────────────
-# First time setup: start infra, create schema, seed data.
+# First time setup: start infra, create schema.
 setup: infra-up db-init ch-init
+
+# Everything ready: infra up, schema in, binaries compiled in bin/.
+# Use this if you want ./bin/<name> instead of go run.
+ready: setup build
 
 # ── Infra ──────────────────────────────────────────────────────────
 infra-up:
