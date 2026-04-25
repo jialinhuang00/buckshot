@@ -15,7 +15,11 @@ Ports `5433` (PG) and `6380` (Redis) are used to avoid colliding with any local 
 
 ## Start
 
-Open 4 terminals (T0 is one-shot, T1–T3 stay open):
+Pick one mode. Both produce identical runtime behavior — they differ only in where the binary lives and how the process tree looks.
+
+### Mode A — `go run` (dev, fast iteration)
+
+Compiles to `/tmp/go-build-*/exe/<name>` each invocation and execs it. A `go run` parent stays alive while the child binary runs. Edit code → re-run target → builds incrementally (cached). No artifacts left in repo.
 
 ```bash
 git clone ...
@@ -23,7 +27,6 @@ cd url-shortener-demo
 
 # T0 — one-shot setup
 make setup         # start Docker infra + init schemas
-                   # or `make ready` if you also want bin/ compiled
 
 # T1, T2, T3 — long-running services, each in its own terminal
 make run-shortener # T1 — API on :8080
@@ -35,17 +38,24 @@ make seed          # seed 50,000 URLs (one-shot, completes in seconds)
 make mimic         # simulate click traffic — needs shortener up (Ctrl+C to stop)
 ```
 
-**Minimum to demo a redirect**: `make setup` + `make run-shortener` + `make seed` + a `curl`.
+### Mode B — local build (production-like, clean process tree)
+
+Compiles once into `bin/<name>` and runs the binary directly. No `go run` parent → Ctrl+C / kill / pkill hit the right PID immediately. Mirrors how you'd ship to Docker / k8s.
+
+```bash
+make ready              # T0 — setup + go build → bin/shortener, bin/consumer, bin/flush
+
+make run-shortener-bin  # T1
+make run-consumer-bin   # T2
+make run-flush-bin      # T3
+
+make seed && make mimic # T4
+```
+
+`-bin` targets depend on `build`, so they re-link if any source changed (cached, usually < 1s).
+
+**Minimum to demo a redirect** (either mode): infra + shortener + seed + a `curl`.
 Other workers (consumer/flush) only enrich the dashboard / analytics views.
-
-### Two ways to run the services
-
-| Target | What it does | When to use |
-|---|---|---|
-| `make run-X` | `go run ./cmd/X/...` — compiles to `/tmp` and execs, behind a `go run` parent process | Daily dev — fast iteration, no `go build` step |
-| `make run-X-bin` | `make build` then `./bin/X` directly | Production-like — single process, clean Ctrl+C, no parent/child orphan |
-
-`make ready` (= `make setup` + `make build`) prepares both schemas and `bin/*` so the `-bin` variants are usable immediately.
 
 ## Try the API
 
