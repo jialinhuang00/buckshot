@@ -83,11 +83,20 @@ flush:      start → connect Redis + PG → ticker every 5s
 
 ```
 make setup         # first time: infra-up + db-init + ch-init
+                   # or `make ready` for setup + go build (./bin/* available)
 make run-shortener # start API (terminal 1)
 make run-consumer  # start Kafka consumer (terminal 2)
 make run-flush     # start flush worker (terminal 3)
-make seed          # seed 50,000 URLs (repeatable, auto-extends)
+make seed          # seed 50,000 URLs (one-shot, repeatable — each call adds 50k)
 make mimic         # simulate continuous skewed click traffic (Ctrl+C to stop)
+```
+
+## Stop / reset
+
+```
+make run-all-down  # SIGTERM all run-* Go binaries, 5s grace, then SIGKILL stragglers
+make db-prune      # drop+recreate PG/CH schemas, FLUSHALL Redis, recreate Kafka topic
+make infra-down    # docker compose down (stops containers, keeps volumes)
 ```
 
 ## Key files
