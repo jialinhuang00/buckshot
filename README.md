@@ -38,6 +38,15 @@ make mimic         # simulate click traffic — needs shortener up (Ctrl+C to st
 **Minimum to demo a redirect**: `make setup` + `make run-shortener` + `make seed` + a `curl`.
 Other workers (consumer/flush) only enrich the dashboard / analytics views.
 
+### Two ways to run the services
+
+| Target | What it does | When to use |
+|---|---|---|
+| `make run-X` | `go run ./cmd/X/...` — compiles to `/tmp` and execs, behind a `go run` parent process | Daily dev — fast iteration, no `go build` step |
+| `make run-X-bin` | `make build` then `./bin/X` directly | Production-like — single process, clean Ctrl+C, no parent/child orphan |
+
+`make ready` (= `make setup` + `make build`) prepares both schemas and `bin/*` so the `-bin` variants are usable immediately.
+
 ## Try the API
 
 **Create a short URL**

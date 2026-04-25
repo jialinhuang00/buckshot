@@ -1,6 +1,6 @@
 # URL Shortener Demo — command reference
 
-.PHONY: setup ready infra-up infra-down infra-status db-init db-shell ch-init db-prune run-shortener run-consumer run-flush run-all-down seed seed-parallel mimic build test-shorten test-redirect
+.PHONY: setup ready infra-up infra-down infra-status db-init db-shell ch-init db-prune run-shortener run-consumer run-flush run-shortener-bin run-consumer-bin run-flush-bin run-all-down seed seed-parallel mimic build test-shorten test-redirect
 
 # ── Workflows ──────────────────────────────────────────────────────
 # First time setup: start infra, create schema.
@@ -43,7 +43,7 @@ db-prune:
 	docker exec -i url-shortener-demo-kafka-1 kafka-topics --bootstrap-server localhost:9092 --create --topic click-events --partitions 1 --replication-factor 1 || true
 	$(MAKE) db-init ch-init
 
-# ── Run services ───────────────────────────────────────────────────
+# ── Run services (go run — fast iteration, builds to /tmp) ─────────
 run-shortener:
 	go run ./cmd/shortener/
 
@@ -52,6 +52,18 @@ run-consumer:
 
 run-flush:
 	go run ./cmd/flush/
+
+# ── Run services (compiled binary — production-like, no go-run wrapper) ────
+# Each depends on `build` so binaries are fresh. Use these when you want
+# clean Ctrl+C / pkill behavior or to mirror prod deployment.
+run-shortener-bin: build
+	./bin/shortener
+
+run-consumer-bin: build
+	./bin/consumer
+
+run-flush-bin: build
+	./bin/flush
 
 # ── Seed & mimic ───────────────────────────────────────────────────
 seed:
@@ -80,11 +92,11 @@ build:
 # Send SIGTERM to all running cmd/* binaries (graceful), wait 5s,
 # then SIGKILL any stragglers. Doesn't touch docker infra.
 run-all-down:
-	@pids=$$(ps aux | grep -E "go-build.*(shortener|consumer|flush|mimic|seed)" | grep -v grep | awk '{print $$2}'); \
+	@pids=$$(ps aux | grep -E "(go-build.*|bin/)(shortener|consumer|flush|mimic|seed)" | grep -v grep | awk '{print $$2}'); \
 	if [ -z "$$pids" ]; then echo "nothing to stop"; exit 0; fi; \
 	echo "SIGTERM: $$pids"; kill $$pids 2>/dev/null || true; \
 	sleep 5; \
-	stragglers=$$(ps aux | grep -E "go-build.*(shortener|consumer|flush|mimic|seed)" | grep -v grep | awk '{print $$2}'); \
+	stragglers=$$(ps aux | grep -E "(go-build.*|bin/)(shortener|consumer|flush|mimic|seed)" | grep -v grep | awk '{print $$2}'); \
 	if [ -n "$$stragglers" ]; then \
 		echo "SIGKILL stragglers: $$stragglers"; \
 		kill -9 $$stragglers 2>/dev/null || true; \
