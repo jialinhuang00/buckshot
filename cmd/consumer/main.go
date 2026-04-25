@@ -80,13 +80,13 @@ func main() {
 			return
 		}
 		b, err := ch.PrepareBatch(context.Background(),
-			`INSERT INTO click_events (short_key, ts, ip, country, device)`)
+			`INSERT INTO click_events (short_key, ts, ip, device)`)
 		if err != nil {
 			log.Println("prepare batch error:", err)
 			return
 		}
 		for _, r := range batch {
-			if err := b.Append(r.shortKey, r.ts, r.ip, "TW", r.device); err != nil {
+			if err := b.Append(r.shortKey, r.ts, r.ip, r.device); err != nil {
 				log.Println("append error:", err)
 			}
 		}

@@ -164,7 +164,7 @@ Analytics  http://localhost:8080/analytics
 
 ## ClickHouse schema
 
-- `click_events` — short_key, ts, ip, country, device (append-only, MergeTree)
+- `click_events` — short_key, ts, ip, device (append-only, MergeTree)
 
 ## Seed design
 

@@ -32,7 +32,7 @@ ch-init:
 db-prune:
 	docker exec -i url-shortener-demo-postgres-1 psql -U user -d urlshortener -c \
 		"DROP TABLE IF EXISTS url_mappings, url_stats, id_counter, seed_ranges CASCADE;"
-	curl -s -X POST http://localhost:8123 --data "TRUNCATE TABLE click_events"
+	curl -s -X POST http://localhost:8123 --data "DROP TABLE IF EXISTS click_events"
 	docker exec -i url-shortener-demo-redis-1 redis-cli FLUSHALL
 	docker exec -i url-shortener-demo-kafka-1 kafka-topics --bootstrap-server localhost:9092 --delete --topic click-events || true
 	sleep 3
