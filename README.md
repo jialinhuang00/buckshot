@@ -8,7 +8,7 @@ For the full architecture, see [CLAUDE.md](./CLAUDE.md).
 
 ## Prerequisites
 
-- Go 1.21+
+- Go 1.26+
 - Docker + Docker Compose
 
 Ports `5433` (PG) and `6380` (Redis) are used to avoid colliding with any local PG/Redis you might already run on the standard ports.
@@ -65,7 +65,7 @@ Other workers (consumer/flush) only enrich the dashboard / analytics views.
 curl -s -X POST :8080/shorten \
   -H "Content-Type: application/json" \
   -d '{"long_url":"https://example.com"}' | jq .
-# → { "short_url": "http://localhost:8080/aB3cD2" }
+# → { "short_key": "aB3cD2", "short_url": "http://localhost:8080/aB3cD2" }
 ```
 
 **Hit a seeded key**

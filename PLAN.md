@@ -63,7 +63,7 @@ ClickHouse schema 有 `country` 欄位但沒做 IP → 國家查詢。改 schema
 - **seed**: 雙層 ctx 檢查，中斷時 log total inserted。
 - **mimic**: semaphore send + HTTP request 都帶 ctx；`outer:` label 跳出後 `wg.Wait` drain。
 
-**順便發現的坑**：`go run` 的 parent / child orphan 問題。`pkill -f "cmd/X"` 只 match parent，殺不到實際 binary。Phase 3 之前 process 1ms 內就死所以看不到，graceful 後 child 真的需要時間 drain 才暴露這個 race。`make down` 用 `go-build.*<binary>` pattern 解決。
+**順便發現的坑**：`go run` 的 parent / child orphan 問題。`pkill -f "cmd/X"` 只 match parent，殺不到實際 binary。Phase 3 之前 process 1ms 內就死所以看不到，graceful 後 child 真的需要時間 drain 才暴露這個 race。`make run-all-down` 用 `go-build.*<binary>` pattern 解決。
 
 對照學習材料：`/tmp/graceful-demo/{ungraceful,graceful}.go`。
 
@@ -88,20 +88,20 @@ ClickHouse schema 有 `country` 欄位但沒做 IP → 國家查詢。改 schema
 
 ---
 
-## 7. ✅ `make down` — graceful kill helper
+## 7. ✅ `make run-all-down` — graceful kill helper
 
 **完成於** `23cd16d`
 
 `go run ./cmd/X/...` 會起 parent + child 兩個 process。Ctrl+C 在 terminal 兩個都收到 SIGINT 沒問題，但 `pkill -f "cmd/X"` 只 match parent — child 永遠殺不到。
 
 ```makefile
-down:
+run-all-down:
     SIGTERM 所有 go-build.*(shortener|consumer|flush|mimic|seed)
     sleep 5
     SIGKILL stragglers
 ```
 
-不影響 docker infra。reset 流程現在是 `make down && make db-prune && ...`。
+不影響 docker infra。reset 流程現在是 `make run-all-down && make db-prune && ...`。
 
 ---
 
@@ -166,13 +166,13 @@ down:
 
 **問題**：kafka-go `MaxBytes: 10e6` 會在 process 內預先 fetch 一批訊息（上千則）。`make db-prune` 砍掉 Kafka topic 重建後，consumer 記憶體裡那批舊訊息還是會繼續寫進新的（空的）ClickHouse。
 
-**現況（Phase 3 後）**：consumer 收到 SIGTERM 走 graceful drain，L1+L2+L3 buffer 排空寫進 CH 之後才退。`make down` + `make db-prune` 流程下，Kafka topic 砍之前 consumer 已經乾淨退出，**不會污染**。
+**現況（Phase 3 後）**：consumer 收到 SIGTERM 走 graceful drain，L1+L2+L3 buffer 排空寫進 CH 之後才退。`make run-all-down` + `make db-prune` 流程下，Kafka topic 砍之前 consumer 已經乾淨退出，**不會污染**。
 
-**仍有風險的情境**：跳過 `make down`，直接 `make db-prune` 而 consumer 還活著 → 老問題還在。CLAUDE.md 警告維持有效。
+**仍有風險的情境**：跳過 `make run-all-down`，直接 `make db-prune` 而 consumer 還活著 → 老問題還在。CLAUDE.md 警告維持有效。
 
 ### D. flush race during prune（已大幅緩解）
 
-跟 C 同模式：Phase 3 graceful shutdown + `make down` 流程已經處理。`db-prune` 期間如果 consumer / flush 還活著就還是會撞，但標準 reset 流程不會發生。
+跟 C 同模式：Phase 3 graceful shutdown + `make run-all-down` 流程已經處理。`db-prune` 期間如果 consumer / flush 還活著就還是會撞，但標準 reset 流程不會發生。
 
 ---
 

@@ -36,7 +36,7 @@ mimic → shortener(:8080)
 
 flush    → Redis(:6380) → PG(:5433)
 consumer → Kafka(:9092) → ClickHouse(:9000)   (Consumer)
-browser  → shortener(:8080) → ClickHouse(:8123)
+browser  → shortener(:8080) → ClickHouse(:9000)
 ```
 
 ## Services
