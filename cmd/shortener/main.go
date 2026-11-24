@@ -39,6 +39,7 @@ func main() {
 
 	r := gin.Default()
 	r.GET("/", handler.Dashboard)
+	r.GET("/archi", handler.Archi)
 	r.POST("/shorten", handler.NewShortenHandler(pg, redis, counter, config.ShortenerBaseURL()).Handle)
 	r.GET("/stats", stats.List)
 	r.GET("/stats/:key", stats.Snapshot)

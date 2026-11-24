@@ -92,6 +92,7 @@ curl -v :8080/zzzzzz   # → 404
 |---|---|
 | http://localhost:8080/ | Dashboard — top 100 keys with live click counts (PG total + Redis live delta), SSE-pushed |
 | http://localhost:8080/analytics | Analytics — clicks per interval (30s / 1m / 15m / 30m), top 10, device split. Query ClickHouse |
+| http://localhost:8080/archi | Architecture walk — a dot follows one request through every service, each step cited to file and line. Arrow keys step, `z` switches to Chinese |
 
 The dashboard updates per-click via SSE (event-driven). Analytics is pulled on demand from ClickHouse, so its data lags by however long the consumer takes to drain Kafka into CH (under load: a few seconds).
 

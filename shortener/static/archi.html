@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>URL Shortener Flow</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: one screen, no page scroll. A bar of controls, the drawing, one line of legend.
+   The current step floats in a band kept free under the drawing. The pink dot is the only loud colour. */
+:root {
+  --bg: #eceff3;
+  --panel: #f8fafc;
+  --ink: #17202b;
+  --muted: #5a6573;
+  --rule: #c3cad3;
+  --grid: rgba(23, 32, 43, 0.07);
+  --stream: #6a3fd0;
+  --tick: #a8500c;
+  --packet: #d6246e;
+  --j-str: #00758f;
+  --j-word: #c2302a;
+  --display: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --body: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141b; --panel: #171e28; --ink: #e5eaf0; --muted: #94a1af; --rule: #2d3745;
+    --grid: rgba(229, 234, 240, 0.06);
+    --stream: #ab8fff; --tick: #f0a35a; --packet: #ff5f9c; --j-str: #55d2ec; --j-word: #ff7168;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141b; --panel: #171e28; --ink: #e5eaf0; --muted: #94a1af; --rule: #2d3745;
+  --grid: rgba(229, 234, 240, 0.06);
+  --stream: #ab8fff; --tick: #f0a35a; --packet: #ff5f9c; --j-str: #55d2ec; --j-word: #ff7168;
+  color-scheme: dark;
+}
+
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.6; }
+.sheet {
+  height: 100%; box-sizing: border-box; padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 10px;
+}
+
+.bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.left { display: flex; flex-wrap: wrap; gap: 6px 20px; align-items: center; }
+.tabs, .ctl { display: flex; flex-wrap: wrap; gap: 6px; }
+button {
+  font: 600 0.84rem var(--body); color: var(--ink); background: var(--panel);
+  border: 1.5px solid var(--ink); padding: 7px 13px; cursor: pointer; border-radius: 0;
+}
+button:hover { background: var(--bg); }
+button:focus-visible { outline: 2px solid var(--packet); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.tabs button small { font: 400 0.72rem var(--mono); opacity: 0.75; margin-left: 6px; }
+.ctl button { display: inline-flex; align-items: center; padding: 8px 10px; }
+#af-vars::before { content: attr(data-label); align-self: center; font-size: 0.8rem; color: var(--muted); margin-right: 2px; }
+#af-vars button { padding: 5px 10px; font-size: 0.8rem; border-style: dashed; }
+#af-vars button[aria-pressed="true"] { border-style: solid; }
+
+figure { position: relative; margin: 0; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+/* The bottom padding is a fixed band for the snackbar. It is in px, not in drawing units,
+   so the snackbar never covers a node however short the window is. */
+.frame {
+  flex: 1; min-height: 0; overflow-x: auto; border: 1.5px solid var(--ink);
+  box-sizing: border-box; padding-bottom: 104px;
+  background: radial-gradient(circle, var(--grid) 1px, transparent 1px) 0 0 / 16px 16px, var(--panel);
+}
+.frame svg { display: block; width: 100%; height: 100%; }
+@media (max-width: 700px) { .frame svg { min-width: 860px; } }
+figcaption {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  width: max-content; max-width: min(760px, calc(100% - 28px)); box-sizing: border-box;
+  background: var(--ink); color: var(--bg); box-shadow: 4px 4px 0 var(--packet);
+  padding: 10px 16px; display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; align-items: baseline;
+}
+figcaption .n { font: 700 1rem var(--display); font-variant-numeric: tabular-nums; }
+figcaption .t { font-size: 0.95rem; line-height: 1.5; min-width: 0; }
+figcaption .src { grid-column: 2; font: 400 0.72rem var(--mono); opacity: 0.7; overflow-wrap: anywhere; }
+code { font: 0.9em var(--mono); }
+
+/* nodes */
+.node .box { fill: var(--panel); stroke: var(--ink); stroke-width: 1.5; stroke-linejoin: round; }
+.node .ttl { font: 700 14px var(--display); fill: var(--ink); }
+.node .sub, .node .route { font: 400 10.5px var(--mono); fill: var(--muted); }
+.node .ico { stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.slot { fill: var(--bg); stroke: var(--rule); stroke-width: 1; }
+.slot.on { stroke: var(--packet); stroke-width: 2; }
+.slotT { font: 400 10.5px var(--mono); fill: var(--ink); }
+.node, .edge { transition: opacity 0.25s; }
+.dim { opacity: 0.28; }
+.node.on .box { stroke: var(--packet); stroke-width: 2.5; }
+
+/* edges. Order matters: .on comes after the kinds, .hit comes last. */
+.edge path { fill: none; stroke-width: 1.8; }
+.edge.call path { stroke: var(--ink); }
+.edge.call polygon { fill: var(--ink); }
+.edge.stream path { stroke: var(--stream); stroke-dasharray: 7 5; animation: march 0.7s linear infinite; }
+.edge.stream polygon { fill: var(--stream); }
+.edge.tick path { stroke: var(--tick); stroke-dasharray: 6 6; animation: burst 5s linear infinite; }
+.edge.tick polygon { fill: var(--tick); }
+.edge.on path { stroke: var(--packet); stroke-width: 5; }
+.edge.on polygon { fill: var(--packet); }
+.edge text { font: 400 11px var(--mono); fill: var(--ink); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+.edge.stream text { fill: var(--stream); }
+.edge.tick text { fill: var(--tick); }
+.edge.on text { fill: var(--packet); font-weight: 600; }
+@keyframes march { to { stroke-dashoffset: -12; } }
+/* a job on a timer: the dashes move for a fifth of the period, then stand still */
+@keyframes burst { 0% { stroke-dashoffset: 0; } 20%, 100% { stroke-dashoffset: -48; } }
+/* wide invisible stroke so a thin line is easy to hover */
+.edge path.hit { stroke: transparent; stroke-width: 18; stroke-dasharray: none; animation: none; pointer-events: stroke; }
+.edge.on, #af-packet, #af-halo { cursor: help; }
+#af-packet { fill: var(--packet); stroke: var(--panel); stroke-width: 2.5; }
+#af-halo { fill: transparent; stroke: var(--packet); stroke-width: 1.5; opacity: 0.55; }
+
+#af-pop {
+  position: absolute; z-index: 5; pointer-events: none; box-sizing: border-box;
+  max-width: min(460px, calc(100% - 16px)); padding: 10px 12px;
+  background: var(--panel); color: var(--ink); border: 1.5px solid var(--ink); box-shadow: 4px 4px 0 var(--rule);
+}
+#af-pop .hd { font: 400 0.7rem var(--mono); color: var(--muted); margin-bottom: 6px; }
+#af-pop pre { margin: 0; font: 400 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+#af-pop .jk { color: var(--stream); }
+#af-pop .js { color: var(--j-str); }
+#af-pop .jn { color: var(--tick); }
+#af-pop .jw { color: var(--j-word); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 4px 20px; font-size: 0.78rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.legend svg { flex: none; }
+.legend .dot { fill: var(--packet); }
+
+@media (prefers-reduced-motion: reduce) {
+  .edge.stream path, .edge.tick path { animation: none; }
+  .node, .edge { transition: none; }
+}
+</style>
+
+<div class="sheet" id="app"></div>
+
+<script>
+/* hiroki-archi-flow renderer. Framework-free: ArchiFlow.mount(root, data, icons).
+   It knows nothing about any one repo. Everything repo-specific is in the data file.
+   The meaning of each line kind and each node outline is fixed here, so the legend cannot drift from the drawing. */
+(function () {
+  // Role glyphs, drawn on a 34 grid with strokes only. Products use a real logo from icons/ instead.
+  const ROLE = {
+    browser: '<rect x="5" y="8" width="24" height="18"/><path d="M5 13h24"/>',
+    user: '<circle cx="17" cy="12" r="5"/><path d="M7 28c0-6 4.5-9 10-9s10 3 10 9"/>',
+    phone: '<rect x="10" y="5" width="14" height="24" rx="2"/><path d="M15 25h4"/>',
+    clock: '<circle cx="17" cy="17" r="10"/><path d="M17 11v6l4.5 2.5"/>',
+    batch: '<path d="M7 9h20M7 14h20M7 19h20"/><path d="M17 22v6M13.5 25l3.5 3.5 3.5-3.5"/>',
+    gear: '<circle cx="17" cy="17" r="4"/><path d="M17 6v4M17 24v4M6 17h4M24 17h4M9.2 9.2l2.8 2.8M22 22l2.8 2.8M9.2 24.8l2.8-2.8M22 12l2.8-2.8"/>',
+  }
+
+  const UI = {
+    en: {
+      auto: 'Auto-play', prev: 'Previous step (left arrow key)', next: 'Next step (right arrow key)', outcome: 'This time',
+      sample: 'Sample data. Field names and commands come from the code. The values are made up.',
+      now: 'The current step. Hover it, or the thick line, to see sample data.',
+      line: {
+        call: 'Solid: one question, one answer. The arrow points at the side being asked.',
+        stream: 'Moving dashes: data keeps flowing on its own. The arrow is where the data goes.',
+        tick: 'Dashes that move, then wait: a job on a timer.',
+      },
+      shape: { pill: 'person or browser', rect: 'service that takes requests', cyl: 'data store', pipe: 'queue', hex: 'background worker' },
+    },
+    zh: {
+      auto: '自動播放', prev: '上一步（鍵盤左鍵）', next: '下一步（鍵盤右鍵）', outcome: '這次',
+      sample: '示範資料。欄位名跟指令來自 code，值是編的',
+      now: '現在這一步。滑到它或變粗的那條線上會顯示示範資料',
+      line: {
+        call: '實線是一問一答，箭頭指向被問的那一方',
+        stream: '一直在走的虛線，是資料自己持續流過去',
+        tick: '走一下停一下的虛線，是定時跑的工作',
+      },
+      shape: { pill: '人或瀏覽器', rect: '接 request 的服務', cyl: '存資料的', pipe: 'queue', hex: '背景 worker' },
+    },
+  }
+
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  const dOf = (pts) => 'M' + pts.map((p) => p.join(' ')).join(' L')
+  function head(pts) {
+    const [x2, y2] = pts[pts.length - 1], [x1, y1] = pts[pts.length - 2]
+    const a = Math.atan2(y2 - y1, x2 - x1), c = Math.cos(a), s = Math.sin(a)
+    const bx = x2 - 10 * c, by = y2 - 10 * s
+    return `${x2},${y2} ${bx - 4.5 * s},${by + 4.5 * c} ${bx + 4.5 * s},${by - 4.5 * c}`
+  }
+
+  // Every outline touches the four midpoints of its bounding box, so an edge anchored there meets the outline.
+  const SHAPE = {
+    rect: (n) => `<rect class="box" x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}"/>`,
+    pill: (n) => `<rect class="box" x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="${n.h / 2}"/>`,
+    hex: (n) => {
+      const i = Math.min(14, n.h * 0.22)
+      return `<polygon class="box" points="${n.x},${n.y + n.h / 2} ${n.x + i},${n.y} ${n.x + n.w - i},${n.y} ${n.x + n.w},${n.y + n.h / 2} ${n.x + n.w - i},${n.y + n.h} ${n.x + i},${n.y + n.h}"/>`
+    },
+    cyl: (n) => {
+      const c = Math.min(7, n.h * 0.2)
+      return `<path class="box" d="M${n.x} ${n.y + c}v${n.h - 2 * c}a${n.w / 2} ${c} 0 0 0 ${n.w} 0v${-(n.h - 2 * c)}"/>`
+        + `<ellipse class="box" cx="${n.x + n.w / 2}" cy="${n.y + c}" rx="${n.w / 2}" ry="${c}"/>`
+    },
+    pipe: (n) => {
+      const c = Math.min(8, n.h * 0.2)
+      return `<path class="box" d="M${n.x + c} ${n.y}H${n.x + n.w - c}A${c} ${n.h / 2} 0 0 1 ${n.x + n.w - c} ${n.y + n.h}H${n.x + c}A${c} ${n.h / 2} 0 0 1 ${n.x + c} ${n.y}z"/>`
+        + `<ellipse class="box" cx="${n.x + n.w - c}" cy="${n.y + n.h / 2}" rx="${c}" ry="${n.h / 2}"/>`
+    },
+  }
+
+  const BTN = {
+    auto: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 3l8 5-8 5z" fill="currentColor"/></svg>',
+    prev: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    next: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  }
+
+  function mount(root, data, icons) {
+    icons = icons || {}
+    const NODES = data.nodes, EDGES = data.edges, JOURNEYS = data.journeys
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    // English first. z switches to Chinese and back; nothing on the page says so and the choice is not remembered.
+    let lang = 'en', ji = 0, si = 0, vi = null, playing = !reduced, token = 0, pending = false
+    const tx = (v) => (v == null ? '' : typeof v === 'string' ? v : v[lang] != null ? v[lang] : v.en)
+    const [W, H] = data.viewBox
+
+    root.innerHTML = `<div class="bar"><div class="left">`
+      + `<div class="tabs" id="af-tabs" role="group"></div><div class="tabs" id="af-vars" role="group"></div></div>`
+      + `<div class="ctl"><button id="af-auto" type="button">${BTN.auto}</button>`
+      + `<button id="af-prev" type="button">${BTN.prev}</button><button id="af-next" type="button">${BTN.next}</button></div></div>`
+      + `<figure><div class="frame"><svg id="af-svg" viewBox="0 0 ${W} ${H}" role="img"></svg></div>`
+      + `<figcaption id="af-cap"><span class="n"></span><span class="t"></span><span class="src"></span></figcaption>`
+      + `<div id="af-pop" hidden><div class="hd"></div><pre></pre></div></figure>`
+      + `<div class="legend" id="af-legend"></div>`
+    const $ = (id) => document.getElementById('af-' + id)
+    const svg = $('svg'), tabs = $('tabs'), vars = $('vars'), cap = $('cap'), pop = $('pop'), fig = pop.parentElement
+
+    // one colour token per node that names a hue: [light, dark]
+    const hued = Object.keys(NODES).filter((id) => NODES[id].hue)
+    const hueCss = (sel, i) => `${sel}{${hued.map((id) => `--n-${id}:${NODES[id].hue[i]}`).join(';')}}`
+    const st = document.createElement('style')
+    st.textContent = hueCss(':root', 0) + `@media (prefers-color-scheme: dark){${hueCss(':root:not([data-theme="light"])', 1)}}` + hueCss(':root[data-theme="dark"]', 1)
+    document.head.appendChild(st)
+
+    function glyph(name, hue, x, y, S) {
+      const ic = icons[name]
+      if (ic) return `<svg x="${x}" y="${y}" width="${S}" height="${S}" viewBox="${ic.vb}"${ic.mono ? ` fill="${hue}"` : ''}>${ic.body}</svg>`
+      const r = ROLE[String(name).replace('role:', '')]
+      return r ? `<g class="ico" transform="translate(${x} ${y}) scale(${S / 34})" fill="none" stroke="${hue}">${r}</g>` : ''
+    }
+    function nodeSvg(id, n) {
+      const hue = n.hue ? `var(--n-${id})` : 'var(--muted)', kind = n.shape || 'rect'
+      const dx = kind === 'rect' || kind === 'cyl' ? 12 : 22, dy = kind === 'cyl' ? 6 : 0
+      const S = 44, ix = n.x + dx, iy = n.y + 14 + dy
+      return `<g class="node" data-n="${id}">${SHAPE[kind](n)}${glyph(n.icon, hue, ix, iy, S)}`
+        + `<text class="ttl" x="${ix + S + 8}" y="${iy + 19}">${esc(tx(n.t))}</text>`
+        + `<text class="sub" x="${ix + S + 8}" y="${iy + 36}">${esc(tx(n.s))}</text>`
+        + (n.routes || []).map((r, i) => `<text class="route" x="${n.x + 14}" y="${n.y + 96 + i * 17}">${esc(r)}</text>`).join('')
+        + (n.slots || []).map((s) => `<rect class="slot" data-slot="${s.id}" x="${n.x + 10}" y="${s.y - 11}" width="${n.w - 20}" height="22"/>`
+          + `<text class="slotT" x="${n.x + 18}" y="${s.y + 4}">${esc(s.t)}</text>`).join('')
+        + `</g>`
+    }
+    function draw() {
+      let h = ''
+      for (const [id, e] of Object.entries(EDGES)) {
+        h += `<g class="edge ${e.kind}" data-e="${id}"><path id="af-p-${id}" d="${dOf(e.pts)}"${e.every ? ` style="animation-duration:${e.every}s"` : ''}/>`
+          + `<path class="hit" d="${dOf(e.pts)}"/><polygon points="${head(e.pts)}"/>`
+          + `<text x="${e.lx}" y="${e.ly}" text-anchor="${e.anchor || 'middle'}">${esc(tx(e.lab))}</text></g>`
+      }
+      for (const [id, n] of Object.entries(NODES)) h += nodeSvg(id, n)
+      svg.innerHTML = h + `<circle id="af-halo" r="12" cx="-40" cy="-40"/><circle id="af-packet" r="8" cx="-40" cy="-40"/>`
+      svg.setAttribute('aria-label', tx(data.title))
+
+      const u = UI[lang]
+      $('auto').title = u.auto; $('auto').setAttribute('aria-label', u.auto)
+      $('prev').title = u.prev; $('prev').setAttribute('aria-label', u.prev)
+      $('next').title = u.next; $('next').setAttribute('aria-label', u.next)
+      vars.dataset.label = u.outcome
+      pop.querySelector('.hd').textContent = u.sample
+      tabs.innerHTML = JOURNEYS.map((j, i) => `<button type="button" id="af-tab-${j.id}" data-j="${i}">${esc(tx(j.name))}<small>${esc(j.route || '')}</small></button>`).join('')
+
+      const kinds = [...new Set(Object.values(EDGES).map((e) => e.kind))], shapes = [...new Set(Object.values(NODES).map((n) => n.shape || 'rect'))]
+      const line = (k) => `<span><svg width="46" height="12" viewBox="0 0 46 12" aria-hidden="true"><g class="edge ${k}"><path d="M1 6H36"/><polygon points="45,6 35,1.5 35,10.5"/></g></svg>${u.line[k]}</span>`
+      const shp = (k) => `<span><svg width="30" height="16" viewBox="0 0 30 16" aria-hidden="true"><g class="node">${SHAPE[k]({ x: 1, y: 1, w: 28, h: 14 })}</g></svg>${u.shape[k]}</span>`
+      $('legend').innerHTML = kinds.map(line).join('') + shapes.map(shp).join('')
+        + `<span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5" class="dot"/></svg>${u.now}</span>`
+    }
+
+    // the steps that exist for the outcome the reader picked
+    const cur = () => { const j = JOURNEYS[ji]; return j.variants ? j.steps.filter((s) => !s.v || s.v.includes(vi)) : j.steps }
+    function place(x, y) {
+      for (const id of ['packet', 'halo']) { $(id).setAttribute('cx', x); $(id).setAttribute('cy', y) }
+    }
+    function paintJourney() {
+      const j = JOURNEYS[ji]
+      if (j.variants && !j.variants.some((v) => v.id === vi)) vi = j.start || j.variants[0].id
+      const used = new Set(cur().flatMap((s) => s.e.map((x) => x[0])))
+      const usedN = new Set([...used].flatMap((id) => [EDGES[id].a, EDGES[id].b]))
+      svg.querySelectorAll('.edge').forEach((g) => g.classList.toggle('dim', !used.has(g.dataset.e)))
+      svg.querySelectorAll('.node').forEach((g) => g.classList.toggle('dim', !usedN.has(g.dataset.n)))
+      tabs.querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-pressed', i === ji))
+      vars.hidden = !j.variants
+      vars.innerHTML = (j.variants || []).map((v) => `<button type="button" id="af-var-${v.id}" data-v="${v.id}" aria-pressed="${v.id === vi}">${esc(tx(v.name))}</button>`).join('')
+    }
+    function paintStep() {
+      const steps = cur(), s = steps[si]
+      const on = new Set(s.e.map((x) => x[0]))
+      const onN = new Set([...on].flatMap((id) => [EDGES[id].a, EDGES[id].b]))
+      svg.querySelectorAll('.edge').forEach((g) => g.classList.toggle('on', on.has(g.dataset.e)))
+      svg.querySelectorAll('.node').forEach((g) => g.classList.toggle('on', onN.has(g.dataset.n)))
+      svg.querySelectorAll('.slot').forEach((r) => r.classList.toggle('on', [...on].some((id) => EDGES[id].slot === r.dataset.slot)))
+      cap.querySelector('.n').textContent = `${si + 1} / ${steps.length}`
+      cap.querySelector('.t').innerHTML = tx(s.t)
+      cap.querySelector('.src').textContent = s.src
+    }
+
+    // colour by token type: key, string, number, true/false/null
+    function paintJSON(v) {
+      return esc(JSON.stringify(v, null, 2)).replace(/("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?/g, (m, str, colon, word) => {
+        if (str) return colon ? `<span class="jk">${str}</span>${colon}` : `<span class="js">${str}</span>`
+        return `<span class="${word ? 'jw' : 'jn'}">${m}</span>`
+      })
+    }
+    // hover on the thick line or the dot shows what this step sends. Auto-play waits while the popover is open.
+    function hidePop() {
+      if (pop.hidden) return
+      pop.hidden = true
+      if (pending && playing) { pending = false; advance(1) }
+    }
+    function hover(ev) {
+      const t = ev.target
+      if (!(t.closest && (t.closest('.edge.on') || t.id === 'af-packet' || t.id === 'af-halo'))) return hidePop()
+      pop.querySelector('pre').innerHTML = paintJSON(cur()[si].d)
+      pop.hidden = false
+      const r = fig.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight
+      let x = ev.clientX - r.left + 14, y = ev.clientY - r.top + 14
+      if (x + w > r.width - 8) x = Math.max(8, r.width - w - 8)
+      if (y + h > r.height - 8) y = Math.max(8, ev.clientY - r.top - h - 14)
+      pop.style.left = x + 'px'; pop.style.top = y + 'px'
+    }
+
+    function runStep() {
+      const my = ++token
+      pending = false; pop.hidden = true
+      paintStep()
+      // each leg: [path, from, to] along the path's length
+      const legs = []
+      for (const [id, dir] of cur()[si].e) {
+        const p = $('p-' + id)
+        if (dir !== 'back') legs.push([p, 0, 1])
+        if (dir !== 'fwd') legs.push([p, 1, 0])
+      }
+      if (reduced) {
+        const p = legs[legs.length - 1][0], pt = p.getPointAtLength(p.getTotalLength() / 2)
+        return place(pt.x, pt.y)
+      }
+      let k = 0, start = null
+      function frame(now) {
+        if (my !== token) return
+        const [p, from, to] = legs[k], len = p.getTotalLength(), dur = Math.max(520, len * 4.2)
+        if (start === null) start = now
+        const u = Math.min(1, (now - start) / dur), ease = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2
+        const pt = p.getPointAtLength(len * (from + (to - from) * ease))
+        place(pt.x, pt.y)
+        if (u < 1) return requestAnimationFrame(frame)
+        k += 1; start = null
+        if (k < legs.length) return requestAnimationFrame(frame)
+        if (playing) setTimeout(() => {
+          if (my !== token || !playing) return
+          if (pop.hidden) advance(1); else pending = true
+        }, 1500)
+      }
+      requestAnimationFrame(frame)
+    }
+    function advance(d) {
+      const n = cur().length
+      si = (si + d + n) % n
+      runStep()
+    }
+    function setPlaying(v) {
+      playing = v && !reduced
+      $('auto').setAttribute('aria-pressed', playing)
+    }
+
+    tabs.addEventListener('click', (ev) => {
+      const b = ev.target.closest('button'); if (!b) return
+      ji = +b.dataset.j; si = 0; paintJourney(); runStep()
+    })
+    vars.addEventListener('click', (ev) => {
+      const b = ev.target.closest('button'); if (!b) return
+      vi = b.dataset.v; si = 0; paintJourney(); runStep()
+    })
+    // stepping by hand never flips the auto-play switch; only the switch does
+    $('prev').addEventListener('click', () => advance(-1))
+    $('next').addEventListener('click', () => advance(1))
+    $('auto').addEventListener('click', () => { setPlaying(!playing); if (playing) runStep() })
+    svg.addEventListener('pointermove', hover)
+    svg.addEventListener('pointerdown', hover)
+    svg.addEventListener('pointerleave', hidePop)
+    document.addEventListener('keydown', (ev) => {
+      if (ev.altKey || ev.ctrlKey || ev.metaKey) return
+      const t = ev.target
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+      if (ev.key === 'ArrowLeft') { ev.preventDefault(); advance(-1) }
+      if (ev.key === 'ArrowRight') { ev.preventDefault(); advance(1) }
+      if (ev.key === 'z' || ev.key === 'Z') {
+        lang = lang === 'en' ? 'zh' : 'en'
+        document.documentElement.lang = lang === 'zh' ? 'zh-Hant' : 'en'
+        draw(); paintJourney(); runStep()
+      }
+    })
+
+    document.documentElement.lang = 'en'
+    draw()
+    setPlaying(playing)
+    paintJourney()
+    runStep()
+  }
+
+  window.ArchiFlow = { mount }
+})()
+
+</script>
+<script>
+const ARCHI_ICONS = {"brand:apachekafka": {"vb": "0 0 24 24", "body": "<path d=\"M9.71 2.136a1.43 1.43 0 0 0-2.047 0h-.007a1.48 1.48 0 0 0-.421 1.042c0 .41.161.777.422 1.039l.007.007c.257.264.616.426 1.019.426.404 0 .766-.162 1.027-.426l.003-.007c.261-.262.421-.629.421-1.039 0-.408-.159-.777-.421-1.042H9.71zM8.683 22.295c.404 0 .766-.167 1.027-.429l.003-.008c.261-.261.421-.631.421-1.036 0-.41-.159-.778-.421-1.044H9.71a1.42 1.42 0 0 0-1.027-.432 1.4 1.4 0 0 0-1.02.432h-.007c-.26.266-.422.634-.422 1.044 0 .406.161.775.422 1.036l.007.008c.258.262.617.429 1.02.429zm7.89-4.462c.359-.096.683-.33.882-.684l.027-.052a1.47 1.47 0 0 0 .114-1.067 1.454 1.454 0 0 0-.675-.896l-.021-.014a1.425 1.425 0 0 0-1.078-.132c-.36.091-.684.335-.881.686-.2.349-.241.75-.146 1.119.099.363.33.691.675.896h.002c.346.203.737.239 1.101.144zm-6.405-7.342a2.083 2.083 0 0 0-1.485-.627c-.58 0-1.103.242-1.482.627-.378.385-.612.916-.612 1.507s.233 1.124.612 1.514a2.08 2.08 0 0 0 2.967 0c.379-.39.612-.923.612-1.514s-.233-1.122-.612-1.507zm-.835-2.51c.843.141 1.6.552 2.178 1.144h.004c.092.093.182.196.265.299l1.446-.851a3.176 3.176 0 0 1-.047-1.808 3.149 3.149 0 0 1 1.456-1.926l.025-.016a3.062 3.062 0 0 1 2.345-.306c.77.21 1.465.721 1.898 1.482v.002c.431.757.518 1.626.313 2.408a3.145 3.145 0 0 1-1.456 1.928l-.198.118h-.02a3.095 3.095 0 0 1-2.154.201 3.127 3.127 0 0 1-1.514-.944l-1.444.848a4.162 4.162 0 0 1 0 2.879l1.444.846c.413-.47.939-.789 1.514-.944a3.041 3.041 0 0 1 2.371.319l.048.023v.002a3.17 3.17 0 0 1 1.408 1.906 3.215 3.215 0 0 1-.313 2.405l-.026.053-.003-.005a3.147 3.147 0 0 1-1.867 1.436 3.096 3.096 0 0 1-2.371-.318v-.006a3.156 3.156 0 0 1-1.456-1.927 3.175 3.175 0 0 1 .047-1.805l-1.446-.848a3.905 3.905 0 0 1-.265.294l-.004.005a3.938 3.938 0 0 1-2.178 1.138v1.699a3.09 3.09 0 0 1 1.56.862l.002.004c.565.572.914 1.368.914 2.243 0 .873-.35 1.664-.914 2.239l-.002.009a3.1 3.1 0 0 1-2.21.931 3.1 3.1 0 0 1-2.206-.93h-.002v-.009a3.186 3.186 0 0 1-.916-2.239c0-.875.35-1.672.916-2.243v-.004h.002a3.1 3.1 0 0 1 1.558-.862v-1.699a3.926 3.926 0 0 1-2.176-1.138l-.006-.005a4.098 4.098 0 0 1-1.173-2.874c0-1.122.452-2.136 1.173-2.872h.006a3.947 3.947 0 0 1 2.176-1.144V6.289a3.137 3.137 0 0 1-1.558-.864h-.002v-.004a3.192 3.192 0 0 1-.916-2.243c0-.871.35-1.669.916-2.243l.002-.002A3.084 3.084 0 0 1 8.683 0c.861 0 1.641.355 2.21.932v.002h.002c.565.574.914 1.372.914 2.243 0 .876-.35 1.667-.914 2.243l-.002.005a3.142 3.142 0 0 1-1.56.864v1.692zm8.121-1.129l-.012-.019a1.452 1.452 0 0 0-.87-.668 1.43 1.43 0 0 0-1.103.146h.002c-.347.2-.58.529-.677.896-.095.365-.054.768.146 1.119l.007.009c.2.347.519.579.874.673.357.103.755.059 1.098-.144l.019-.009a1.47 1.47 0 0 0 .657-.885 1.493 1.493 0 0 0-.141-1.118\"/>", "mono": true}, "brand:clickhouse": {"vb": "0 0 24 24", "body": "<path d=\"M21.333 10H24v4h-2.667ZM16 1.335h2.667v21.33H16Zm-5.333 0h2.666v21.33h-2.666ZM0 22.665V1.335h2.667v21.33zm5.333-21.33H8v21.33H5.333Z\"/>", "mono": true}, "brand:go": {"vb": "0 0 24 24", "body": "<path d=\"M1.811 10.231c-.047 0-.058-.023-.035-.059l.246-.315c.023-.035.081-.058.128-.058h4.172c.046 0 .058.035.035.07l-.199.303c-.023.036-.082.07-.117.07zM.047 11.306c-.047 0-.059-.023-.035-.058l.245-.316c.023-.035.082-.058.129-.058h5.328c.047 0 .07.035.058.07l-.093.28c-.012.047-.058.07-.105.07zm2.828 1.075c-.047 0-.059-.035-.035-.07l.163-.292c.023-.035.07-.07.117-.07h2.337c.047 0 .07.035.07.082l-.023.28c0 .047-.047.082-.082.082zm12.129-2.36c-.736.187-1.239.327-1.963.514-.176.046-.187.058-.34-.117-.174-.199-.303-.327-.548-.444-.737-.362-1.45-.257-2.115.175-.795.514-1.204 1.274-1.192 2.22.011.935.654 1.706 1.577 1.835.795.105 1.46-.175 1.987-.77.105-.13.198-.27.315-.434H10.47c-.245 0-.304-.152-.222-.35.152-.362.432-.97.596-1.274a.315.315 0 01.292-.187h4.253c-.023.316-.023.631-.07.947a4.983 4.983 0 01-.958 2.29c-.841 1.11-1.94 1.8-3.33 1.986-1.145.152-2.209-.07-3.143-.77-.865-.655-1.356-1.52-1.484-2.595-.152-1.274.222-2.419.993-3.424.83-1.086 1.928-1.776 3.272-2.02 1.098-.2 2.15-.07 3.096.571.62.41 1.063.97 1.356 1.648.07.105.023.164-.117.2m3.868 6.461c-1.064-.024-2.034-.328-2.852-1.029a3.665 3.665 0 01-1.262-2.255c-.21-1.32.152-2.489.947-3.529.853-1.122 1.881-1.706 3.272-1.95 1.192-.21 2.314-.095 3.33.595.923.63 1.496 1.484 1.648 2.605.198 1.578-.257 2.863-1.344 3.962-.771.783-1.718 1.273-2.805 1.495-.315.06-.63.07-.934.106zm2.78-4.72c-.011-.153-.011-.27-.034-.387-.21-1.157-1.274-1.81-2.384-1.554-1.087.245-1.788.935-2.045 2.033-.21.912.234 1.835 1.075 2.21.643.28 1.285.244 1.905-.07.923-.48 1.425-1.228 1.484-2.233z\"/>", "mono": true}, "brand:postgresql": {"vb": "0 0 24 24", "body": "<path d=\"M23.5594 14.7228a.5269.5269 0 0 0-.0563-.1191c-.139-.2632-.4768-.3418-1.0074-.2321-1.6533.3411-2.2935.1312-2.5256-.0191 1.342-2.0482 2.445-4.522 3.0411-6.8297.2714-1.0507.7982-3.5237.1222-4.7316a1.5641 1.5641 0 0 0-.1509-.235C21.6931.9086 19.8007.0248 17.5099.0005c-1.4947-.0158-2.7705.3461-3.1161.4794a9.449 9.449 0 0 0-.5159-.0816 8.044 8.044 0 0 0-1.3114-.1278c-1.1822-.0184-2.2038.2642-3.0498.8406-.8573-.3211-4.7888-1.645-7.2219.0788C.9359 2.1526.3086 3.8733.4302 6.3043c.0409.818.5069 3.334 1.2423 5.7436.4598 1.5065.9387 2.7019 1.4334 3.582.553.9942 1.1259 1.5933 1.7143 1.7895.4474.1491 1.1327.1441 1.8581-.7279.8012-.9635 1.5903-1.8258 1.9446-2.2069.4351.2355.9064.3625 1.39.3772a.0569.0569 0 0 0 .0004.0041 11.0312 11.0312 0 0 0-.2472.3054c-.3389.4302-.4094.5197-1.5002.7443-.3102.064-1.1344.2339-1.1464.8115-.0025.1224.0329.2309.0919.3268.2269.4231.9216.6097 1.015.6331 1.3345.3335 2.5044.092 3.3714-.6787-.017 2.231.0775 4.4174.3454 5.0874.2212.5529.7618 1.9045 2.4692 1.9043.2505 0 .5263-.0291.8296-.0941 1.7819-.3821 2.5557-1.1696 2.855-2.9059.1503-.8707.4016-2.8753.5388-4.1012.0169-.0703.0357-.1207.057-.1362.0007-.0005.0697-.0471.4272.0307a.3673.3673 0 0 0 .0443.0068l.2539.0223.0149.001c.8468.0384 1.9114-.1426 2.5312-.4308.6438-.2988 1.8057-1.0323 1.5951-1.6698zM2.371 11.8765c-.7435-2.4358-1.1779-4.8851-1.2123-5.5719-.1086-2.1714.4171-3.6829 1.5623-4.4927 1.8367-1.2986 4.8398-.5408 6.108-.13-.0032.0032-.0066.0061-.0098.0094-2.0238 2.044-1.9758 5.536-1.9708 5.7495-.0002.0823.0066.1989.0162.3593.0348.5873.0996 1.6804-.0735 2.9184-.1609 1.1504.1937 2.2764.9728 3.0892.0806.0841.1648.1631.2518.2374-.3468.3714-1.1004 1.1926-1.9025 2.1576-.5677.6825-.9597.5517-1.0886.5087-.3919-.1307-.813-.5871-1.2381-1.3223-.4796-.839-.9635-2.0317-1.4155-3.5126zm6.0072 5.0871c-.1711-.0428-.3271-.1132-.4322-.1772.0889-.0394.2374-.0902.4833-.1409 1.2833-.2641 1.4815-.4506 1.9143-1.0002.0992-.126.2116-.2687.3673-.4426a.3549.3549 0 0 0 .0737-.1298c.1708-.1513.2724-.1099.4369-.0417.156.0646.3078.26.3695.4752.0291.1016.0619.2945-.0452.4444-.9043 1.2658-2.2216 1.2494-3.1676 1.0128zm2.094-3.988-.0525.141c-.133.3566-.2567.6881-.3334 1.003-.6674-.0021-1.3168-.2872-1.8105-.8024-.6279-.6551-.9131-1.5664-.7825-2.5004.1828-1.3079.1153-2.4468.079-3.0586-.005-.0857-.0095-.1607-.0122-.2199.2957-.2621 1.6659-.9962 2.6429-.7724.4459.1022.7176.4057.8305.928.5846 2.7038.0774 3.8307-.3302 4.7363-.084.1866-.1633.3629-.2311.5454zm7.3637 4.5725c-.0169.1768-.0358.376-.0618.5959l-.146.4383a.3547.3547 0 0 0-.0182.1077c-.0059.4747-.054.6489-.115.8693-.0634.2292-.1353.4891-.1794 1.0575-.11 1.4143-.8782 2.2267-2.4172 2.5565-1.5155.3251-1.7843-.4968-2.0212-1.2217a6.5824 6.5824 0 0 0-.0769-.2266c-.2154-.5858-.1911-1.4119-.1574-2.5551.0165-.5612-.0249-1.9013-.3302-2.6462.0044-.2932.0106-.5909.019-.8918a.3529.3529 0 0 0-.0153-.1126 1.4927 1.4927 0 0 0-.0439-.208c-.1226-.4283-.4213-.7866-.7797-.9351-.1424-.059-.4038-.1672-.7178-.0869.067-.276.1831-.5875.309-.9249l.0529-.142c.0595-.16.134-.3257.213-.5012.4265-.9476 1.0106-2.2453.3766-5.1772-.2374-1.0981-1.0304-1.6343-2.2324-1.5098-.7207.0746-1.3799.3654-1.7088.5321a5.6716 5.6716 0 0 0-.1958.1041c.0918-1.1064.4386-3.1741 1.7357-4.4823a4.0306 4.0306 0 0 1 .3033-.276.3532.3532 0 0 0 .1447-.0644c.7524-.5706 1.6945-.8506 2.802-.8325.4091.0067.8017.0339 1.1742.081 1.939.3544 3.2439 1.4468 4.0359 2.3827.8143.9623 1.2552 1.9315 1.4312 2.4543-1.3232-.1346-2.2234.1268-2.6797.779-.9926 1.4189.543 4.1729 1.2811 5.4964.1353.2426.2522.4522.2889.5413.2403.5825.5515.9713.7787 1.2552.0696.087.1372.1714.1885.245-.4008.1155-1.1208.3825-1.0552 1.717-.0123.1563-.0423.4469-.0834.8148-.0461.2077-.0702.4603-.0994.7662zm.8905-1.6211c-.0405-.8316.2691-.9185.5967-1.0105a2.8566 2.8566 0 0 0 .135-.0406 1.202 1.202 0 0 0 .1342.103c.5703.3765 1.5823.4213 3.0068.1344-.2016.1769-.5189.3994-.9533.6011-.4098.1903-1.0957.333-1.7473.3636-.7197.0336-1.0859-.0807-1.1721-.151zm.5695-9.2712c-.0059.3508-.0542.6692-.1054 1.0017-.055.3576-.112.7274-.1264 1.1762-.0142.4368.0404.8909.0932 1.3301.1066.887.216 1.8003-.2075 2.7014a3.5272 3.5272 0 0 1-.1876-.3856c-.0527-.1276-.1669-.3326-.3251-.6162-.6156-1.1041-2.0574-3.6896-1.3193-4.7446.3795-.5427 1.3408-.5661 2.1781-.463zm.2284 7.0137a12.3762 12.3762 0 0 0-.0853-.1074l-.0355-.0444c.7262-1.1995.5842-2.3862.4578-3.4385-.0519-.4318-.1009-.8396-.0885-1.2226.0129-.4061.0666-.7543.1185-1.0911.0639-.415.1288-.8443.1109-1.3505.0134-.0531.0188-.1158.0118-.1902-.0457-.4855-.5999-1.938-1.7294-3.253-.6076-.7073-1.4896-1.4972-2.6889-2.0395.5251-.1066 1.2328-.2035 2.0244-.1859 2.0515.0456 3.6746.8135 4.8242 2.2824a.908.908 0 0 1 .0667.1002c.7231 1.3556-.2762 6.2751-2.9867 10.5405zm-8.8166-6.1162c-.025.1794-.3089.4225-.6211.4225a.5821.5821 0 0 1-.0809-.0056c-.1873-.026-.3765-.144-.5059-.3156-.0458-.0605-.1203-.178-.1055-.2844.0055-.0401.0261-.0985.0925-.1488.1182-.0894.3518-.1226.6096-.0867.3163.0441.6426.1938.6113.4186zm7.9305-.4114c.0111.0792-.049.201-.1531.3102-.0683.0717-.212.1961-.4079.2232a.5456.5456 0 0 1-.075.0052c-.2935 0-.5414-.2344-.5607-.3717-.024-.1765.2641-.3106.5611-.352.297-.0414.6111.0088.6356.1851z\"/>", "mono": true}, "brand:redis": {"vb": "0 0 24 24", "body": "<path d=\"M22.71 13.145c-1.66 2.092-3.452 4.483-7.038 4.483-3.203 0-4.397-2.825-4.48-5.12.701 1.484 2.073 2.685 4.214 2.63 4.117-.133 6.94-3.852 6.94-7.239 0-4.05-3.022-6.972-8.268-6.972-3.752 0-8.4 1.428-11.455 3.685C2.59 6.937 3.885 9.958 4.35 9.626c2.648-1.904 4.748-3.13 6.784-3.744C8.12 9.244.886 17.05 0 18.425c.1 1.261 1.66 4.648 2.424 4.648.232 0 .431-.133.664-.365a100.49 100.49 0 0 0 5.54-6.765c.222 3.104 1.748 6.898 6.014 6.898 3.819 0 7.604-2.756 9.33-8.965.2-.764-.73-1.361-1.261-.73zm-4.349-5.013c0 1.959-1.926 2.922-3.685 2.922-.941 0-1.664-.247-2.235-.568 1.051-1.592 2.092-3.225 3.21-4.973 1.972.334 2.71 1.43 2.71 2.619z\"/>", "mono": true}}
+// url-shortener-demo: Go + Redis + PostgreSQL + Kafka + ClickHouse.
+// Every `src` was read from the repo. Sample values (3d7, the URL, the counts) are made up;
+// field names, Redis keys and SQL are the real ones.
+const B = (en, zh) => ({ en, zh })
+const H = 'shortener/handler/'
+// The same action cites the same source in every journey it shows up in.
+const SSE_SRC = H + 'redirect.go:47 → shortener/hub/hub.go:34 → ' + H + 'stream.go:27'
+
+const K = '3d7', URL_ = 'https://example.com/articles/42', TS = '2026-11-24T09:15:02.418+08:00'
+const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)'
+const EVENT = { short_key: K, timestamp: TS, ip: '127.0.0.1', user_agent: UA }
+const FRAME = { frame: 'data: ' + K + '\n\n' }
+const GETBIT = 'GETBIT bloom:urls <pos>  (5 positions, one pipeline)'
+const BUCKET = { hour: '2026-11-24 09:00:00', clicks: 812 }
+const DEVICES = [{ device: 'desktop', clicks: 540 }, { device: 'mobile', clicks: 272 }]
+const LIVE = ['hit', 'miss']
+
+const ARCHI = {
+  title: 'URL Shortener Flow',
+  viewBox: [1160, 664],
+
+  nodes: {
+    client:    { x: 30,  y: 156, w: 180, h: 72,  shape: 'pill', t: 'Visitor',    s: 'browser / mimic', icon: 'role:browser' },
+    dash:      { x: 30,  y: 466, w: 180, h: 72,  shape: 'pill', t: 'Dashboard',  s: 'browser tab',     icon: 'role:browser' },
+    shortener: { x: 330, y: 36,  w: 180, h: 592, shape: 'rect', t: 'shortener',  s: 'Go · :8080',      icon: 'brand:go', hue: ['#00758f', '#55d2ec'],
+                 routes: ['POST /shorten', 'GET /:key', 'GET /stats', 'GET /stream', 'GET /analytics/data'] },
+    // Redis does three different jobs here, one per key, so each key gets its own row and its own line.
+    redis:     { x: 690, y: 36,  w: 180, h: 164, shape: 'cyl',  t: 'Redis',      s: ':6380',           icon: 'brand:redis', hue: ['#c2302a', '#ff7168'],
+                 slots: [{ id: 'bloom', y: 119, t: 'bloom:urls' }, { id: 'cache', y: 147, t: 'url:<key>' }, { id: 'clicks', y: 175, t: 'clicks:<key>' }] },
+    pg:        { x: 690, y: 246, w: 180, h: 72,  shape: 'cyl',  t: 'PostgreSQL', s: ':5433',           icon: 'brand:postgresql', hue: ['#2c6591', '#70b6ea'] },
+    kafka:     { x: 690, y: 436, w: 180, h: 72,  shape: 'pipe', t: 'Kafka',      s: 'click-events',    icon: 'brand:apachekafka', hue: ['#17202b', '#e5eaf0'] },
+    flush:     { x: 950, y: 139, w: 180, h: 72,  shape: 'hex',  t: 'flush',      s: 'Go · every 5s',   icon: 'role:clock', hue: ['#00758f', '#55d2ec'] },
+    consumer:  { x: 950, y: 436, w: 180, h: 72,  shape: 'hex',  t: 'consumer',   s: 'Go · 4 writers',  icon: 'role:batch', hue: ['#00758f', '#55d2ec'] },
+    ch:        { x: 950, y: 556, w: 180, h: 72,  shape: 'cyl',  t: 'ClickHouse', s: 'click_events',    icon: 'brand:clickhouse', hue: ['#8f6b00', '#f0c93a'] },
+  },
+
+  edges: {
+    http:   { a: 'client', b: 'shortener', kind: 'call',   pts: [[210, 192], [330, 192]], lab: 'HTTP',                lx: 270, ly: 183 },
+    dreq:   { a: 'dash', b: 'shortener',   kind: 'call',   pts: [[208, 490], [330, 490]], lab: 'GET /stats',          lx: 269, ly: 481 },
+    sse:    { a: 'shortener', b: 'dash',   kind: 'stream', pts: [[330, 516], [207, 516]], lab: 'SSE +1',              lx: 269, ly: 533 },
+    bloom:  { a: 'shortener', b: 'redis',  kind: 'call',   pts: [[510, 119], [690, 119]], lab: 'GETBIT · SETBIT',     lx: 600, ly: 111, slot: 'bloom' },
+    cache:  { a: 'shortener', b: 'redis',  kind: 'call',   pts: [[510, 147], [690, 147]], lab: 'GET · SET',           lx: 600, ly: 139, slot: 'cache' },
+    clicks: { a: 'shortener', b: 'redis',  kind: 'call',   pts: [[510, 175], [690, 175]], lab: 'INCR · GET',          lx: 600, ly: 167, slot: 'clicks' },
+    pg:     { a: 'shortener', b: 'pg',     kind: 'call',   pts: [[510, 282], [690, 282]], lab: 'mappings · stats',    lx: 600, ly: 273 },
+    pub:    { a: 'shortener', b: 'kafka',  kind: 'stream', pts: [[510, 472], [690, 472]], lab: 'publish click event', lx: 600, ly: 463 },
+    chq:    { a: 'shortener', b: 'ch',     kind: 'call',   pts: [[510, 592], [950, 592]], lab: 'analytics queries',   lx: 730, ly: 583 },
+    scan:   { a: 'redis', b: 'flush',      kind: 'tick',   pts: [[870, 175], [950, 175]], lab: 'GETDEL',              lx: 910, ly: 166, slot: 'clicks', every: 5 },
+    upsert: { a: 'flush', b: 'pg',         kind: 'tick',   pts: [[1040, 211], [1040, 282], [870, 282]], lab: 'UPSERT url_stats', lx: 955, ly: 273, every: 5 },
+    read:   { a: 'kafka', b: 'consumer',   kind: 'stream', pts: [[870, 472], [950, 472]], lab: 'ReadMessage',         lx: 910, ly: 463 },
+    write:  { a: 'consumer', b: 'ch',      kind: 'stream', pts: [[1040, 508], [1040, 556]], lab: '500 rows or 2s',    lx: 1030, ly: 536, anchor: 'end' },
+  },
+
+  journeys: [
+    // A journey with `variants` has no "if" inside its steps. The reader picks the outcome,
+    // and a step tagged `v` only exists in those outcomes.
+    { id: 'click', name: B('Click a short URL', '點短網址'), route: 'GET /:key', start: 'miss',
+      variants: [
+        { id: 'none', name: B('key does not exist', 'key 不存在') },
+        { id: 'hit', name: B('cache hit', 'cache 有') },
+        { id: 'miss', name: B('cache miss', 'cache 沒有') },
+      ],
+      steps: [
+        { e: [['http', 'fwd']], src: H + 'redirect.go:22',
+          t: B('The browser sends <code>GET /:key</code>.', '瀏覽器送出 <code>GET /:key</code>。'),
+          d: { method: 'GET', path: '/' + K, headers: { 'User-Agent': UA } } },
+        { v: ['none'], e: [['bloom', 'both']], src: H + 'redirect.go:26 · store/redis.go:102',
+          t: B('shortener asks Redis for 5 bits of <code>bloom:urls</code>. One of them is 0, so this key was never created.',
+               '問 Redis 的 <code>bloom:urls</code>，查 5 個 bit。其中有 0，代表這個 key 從來沒建過。'),
+          d: { send: GETBIT, reply: [1, 0, 1, 1, 0] } },
+        { v: ['none'], e: [['http', 'back']], src: H + 'redirect.go:28',
+          t: B('It answers 404 right away. The cache, PostgreSQL and Kafka are not touched this time.',
+               '直接回 404。cache、PostgreSQL、Kafka 這次都沒被碰到。'),
+          d: { status: 404, body: { error: 'not found' } } },
+        { v: LIVE, e: [['bloom', 'both']], src: H + 'redirect.go:26 · store/redis.go:105',
+          t: B('shortener asks Redis for 5 bits of <code>bloom:urls</code>. All are 1, so the key may exist and the request goes on.',
+               '問 Redis 的 <code>bloom:urls</code>，查 5 個 bit。全部是 1，這個 key 可能存在，所以繼續往下。'),
+          d: { send: GETBIT, reply: [1, 1, 1, 1, 1] } },
+        { v: ['hit'], e: [['cache', 'both']], src: H + 'redirect.go:33',
+          t: B('It asks the cache for <code>url:&lt;key&gt;</code> and gets the long_url, so PostgreSQL is not asked this time.',
+               '跟 cache 要 <code>url:&lt;key&gt;</code>，拿到 long_url，所以這次不用問 PostgreSQL。'),
+          d: { send: 'GET url:' + K, reply: URL_ } },
+        { v: ['miss'], e: [['cache', 'both']], src: H + 'redirect.go:33 · store/redis.go:15',
+          t: B('It asks the cache for <code>url:&lt;key&gt;</code> and gets nothing. The cache keeps an entry for 10 minutes, so the first click after that ends up here.',
+               '跟 cache 要 <code>url:&lt;key&gt;</code>，沒有。cache 只留 10 分鐘，過期之後第一個來點的人就會這樣。'),
+          d: { send: 'GET url:' + K, reply: null } },
+        { v: ['miss'], e: [['pg', 'both']], src: H + 'redirect.go:36',
+          t: B('So it asks PostgreSQL, table <code>url_mappings</code>.', '改問 PostgreSQL 的 <code>url_mappings</code>。'),
+          d: { send: 'SELECT long_url FROM url_mappings WHERE short_key = $1', args: [K], reply: { long_url: URL_ } } },
+        { v: ['miss'], e: [['cache', 'fwd']], src: H + 'redirect.go:42',
+          t: B('It writes the long_url back to <code>url:&lt;key&gt;</code>, so the next click does not need PostgreSQL.',
+               '把查到的 long_url 寫回 <code>url:&lt;key&gt;</code>，下一個來點的人就不用再問 PostgreSQL。'),
+          d: { send: 'SET url:' + K + ' ' + URL_, ttl: '10m' } },
+        { v: LIVE, e: [['clicks', 'fwd']], src: H + 'redirect.go:46',
+          t: B('<code>INCR clicks:&lt;key&gt;</code>. The click count lives in Redis first.', '<code>INCR clicks:&lt;key&gt;</code>，點擊數先記在 Redis。'),
+          d: { send: 'INCR clicks:' + K, reply: 1 } },
+        { v: LIVE, e: [['sse', 'fwd']], src: SSE_SRC,
+          t: B('The hub pushes this key to every browser that has the dashboard open. That row goes up by one.',
+               'hub 把這個 key 推給每個開著 dashboard 的瀏覽器，那一列的數字加一。'),
+          d: FRAME },
+        { v: LIVE, e: [['pub', 'fwd']], src: H + 'redirect.go:48',
+          t: B('It publishes the click event to the Kafka topic <code>click-events</code> and does not wait for an answer.',
+               '把 click event 送進 Kafka 的 <code>click-events</code> topic，不等它回覆。'),
+          d: { topic: 'click-events', value: EVENT } },
+        { v: LIVE, e: [['http', 'back']], src: H + 'redirect.go:56',
+          t: B('It answers 302 and the browser goes to the long_url. For the visitor, this is the end.',
+               '回 302，瀏覽器轉去 long_url。對訪客來說到這裡就結束了。'),
+          d: { status: 302, headers: { Location: URL_ } } },
+        { v: LIVE, e: [['scan', 'fwd'], ['upsert', 'fwd']], src: 'cmd/flush/main.go:34, 53, 62, 68',
+          t: B('Later, flush scans <code>clicks:*</code> every 5 seconds, takes each number with GETDEL, and adds it to <code>url_stats</code> in PostgreSQL.',
+               '之後 flush 每 5 秒掃一次 <code>clicks:*</code>，用 GETDEL 把數字拿走，加進 PostgreSQL 的 <code>url_stats</code>。'),
+          d: { from_redis: { send: 'GETDEL clicks:' + K, reply: 17 }, to_postgres: { table: 'url_stats', short_key: K, total_clicks: '+= 17' } } },
+        { v: LIVE, e: [['read', 'fwd'], ['write', 'fwd']], src: 'cmd/consumer/main.go:27, 28, 72, 159',
+          t: B('consumer reads the event from Kafka. When it has 500 rows, or 2 seconds have passed, it writes the whole batch to ClickHouse.',
+               'consumer 從 Kafka 讀出那筆 event，湊滿 500 筆或等了 2 秒，就整批寫進 ClickHouse。'),
+          d: { from_kafka: EVENT, to_clickhouse: { table: 'click_events', short_key: K, ts: TS, ip: '127.0.0.1', device: 'mobile' } } },
+      ] },
+
+    { id: 'shorten', name: B('Create a short URL', '建短網址'), route: 'POST /shorten', steps: [
+      { e: [['http', 'fwd']], src: H + 'shorten.go:26',
+        t: B('The client sends <code>POST /shorten</code> with long_url in the body.', '送出 <code>POST /shorten</code>，body 裡帶 long_url。'),
+        d: { method: 'POST', path: '/shorten', body: { long_url: URL_ } } },
+      { e: [['pg', 'both']], src: H + 'shorten.go:33 · shortener/keygen/counter.go:26',
+        t: B('shortener takes the next number from <code>id_counter</code> in PostgreSQL and turns it into base62. That is the short_key.',
+             '跟 PostgreSQL 的 <code>id_counter</code> 拿下一個號碼，轉成 base62 當 short_key。'),
+        d: { send: 'UPDATE id_counter SET next_val = next_val + 1 WHERE id = 1 RETURNING next_val', reply: { next_val: 50001 }, then: 'base62(next_val) = short_key' } },
+      { e: [['pg', 'fwd']], src: H + 'shorten.go:39 · shortener/store/postgres.go:26',
+        t: B('It saves short_key and long_url in <code>url_mappings</code>.', '把 short_key 跟 long_url 存進 <code>url_mappings</code>。'),
+        d: { send: 'INSERT INTO url_mappings (short_key, long_url) VALUES ($1, $2) ON CONFLICT DO NOTHING', args: [K, URL_] } },
+      { e: [['cache', 'fwd']], src: H + 'shorten.go:45',
+        t: B('It also writes a copy to the Redis cache, so the first click does not need PostgreSQL.',
+             '順手寫一份到 Redis cache，所以第一次有人點的時候不用問 PostgreSQL。'),
+        d: { send: 'SET url:' + K + ' ' + URL_, ttl: '10m' } },
+      { e: [['bloom', 'fwd']], src: H + 'shorten.go:46',
+        t: B('It adds the key to the Bloom filter. Without this, a click on the new short URL would get 404 at the Bloom filter check.',
+             '把 key 加進 Bloom filter。沒加的話，點這個短網址會在問 Bloom filter 那步就拿到 404。'),
+        d: { send: 'SETBIT bloom:urls <pos> 1  (5 positions, one pipeline)' } },
+      { e: [['http', 'back']], src: H + 'shorten.go:48',
+        t: B('It answers 201 with the short_url. Kafka and ClickHouse take no part in this path.',
+             '回 201 跟 short_url。Kafka 跟 ClickHouse 在這條路上沒有出場。'),
+        d: { status: 201, body: { short_key: K, short_url: 'http://localhost:8080/' + K } } },
+    ] },
+
+    { id: 'watch', name: B('Read the numbers', '看數字'), route: 'GET /stats · /analytics/data', steps: [
+      { e: [['dreq', 'fwd']], src: H + 'stats.go:24',
+        t: B('The dashboard opens and sends <code>GET /stats</code>.', 'dashboard 開起來，先送 <code>GET /stats</code>。'),
+        d: { method: 'GET', path: '/stats' } },
+      { e: [['pg', 'both']], src: H + 'stats.go:25, 29',
+        t: B('shortener reads the top 100 by clicks from <code>url_stats</code> in PostgreSQL.', '從 PostgreSQL 的 <code>url_stats</code> 拿點擊數前 100 名。'),
+        d: { send: '... ORDER BY s.total_clicks DESC LIMIT 100', reply: [{ short_key: K, total_clicks: 1240, long_url: URL_ }, '... up to 100 rows'] } },
+      { e: [['clicks', 'both']], src: H + 'stats.go:48',
+        t: B('Clicks from the last few seconds are still in Redis, because flush has not moved them yet. So it adds <code>clicks:&lt;key&gt;</code> for each key.',
+             '但 flush 還沒搬走的那幾秒點擊還在 Redis，所以每個 key 要再加上 <code>clicks:&lt;key&gt;</code> 的數字。'),
+        d: { send: 'GET clicks:' + K, reply: 17 } },
+      { e: [['dreq', 'back']], src: H + 'stats.go:52, 55',
+        t: B('It sorts again by the new totals and answers.', '兩邊加起來重新排序，回給瀏覽器。'),
+        d: { status: 200, body: [{ short_key: K, long_url: URL_, total_clicks: 1257 }, '...'] } },
+      { e: [['sse', 'fwd']], src: SSE_SRC,
+        t: B('After that the browser stays connected to <code>GET /stream</code>. Each click sends one key over SSE.',
+             '之後瀏覽器掛在 <code>GET /stream</code> 上，每有人點一次，SSE 就推一個 key 過來。'),
+        d: FRAME },
+      { e: [['dreq', 'fwd']], src: H + 'analytics.go:26',
+        t: B('The analytics page sends <code>GET /analytics/data</code>.', '切到 analytics 頁，送 <code>GET /analytics/data</code>。'),
+        d: { method: 'GET', path: '/analytics/data?g=30m' } },
+      { e: [['chq', 'both']], src: H + 'analytics.go:30, 36, 67',
+        t: B('ClickHouse counts clicks per time bucket, the top 10 keys, and the split by device.', 'ClickHouse 算出每個時間區間的點擊數、前 10 名的 key、裝置比例。'),
+        d: { reply: { hourly: [BUCKET], top: [{ short_key: K, clicks: 96 }], devices: DEVICES } } },
+      { e: [['pg', 'both']], src: H + 'analytics.go:48',
+        t: B('ClickHouse stores only short_key, so shortener asks PostgreSQL for the long_url of those 10 keys.',
+             'ClickHouse 只存 short_key，所以前 10 名的 long_url 要回 PostgreSQL 補。'),
+        d: { lookup: 'url_mappings', keys: [K, '... 10 keys'], reply: [{ short_key: K, long_url: URL_ }] } },
+      { e: [['dreq', 'back']], src: H + 'analytics.go:73',
+        t: B('All three sets of numbers go back to the browser in one response.', '三組數字一起回給瀏覽器畫圖。'),
+        d: { status: 200, body: { hourly: [BUCKET], top: [{ short_key: K, long_url: URL_, clicks: 96 }], devices: DEVICES } } },
+    ] },
+  ],
+}
+
+ArchiFlow.mount(document.getElementById('app'), ARCHI, ARCHI_ICONS)
+</script>
+</html>
