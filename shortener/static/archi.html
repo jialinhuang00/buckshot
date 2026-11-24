@@ -41,6 +41,8 @@
 }
 
 html, body { height: 100%; margin: 0; }
+/* the Artifact skeleton ships this rule; a standalone page has to bring its own, or display:flex beats the hidden attribute */
+[hidden] { display: none !important; }
 body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.6; }
 .sheet {
   height: 100%; box-sizing: border-box; padding-block: 12px;
@@ -158,6 +160,10 @@ code { font: 0.9em var(--mono); }
     phone: '<rect x="10" y="5" width="14" height="24" rx="2"/><path d="M15 25h4"/>',
     clock: '<circle cx="17" cy="17" r="10"/><path d="M17 11v6l4.5 2.5"/>',
     batch: '<path d="M7 9h20M7 14h20M7 19h20"/><path d="M17 22v6M13.5 25l3.5 3.5 3.5-3.5"/>',
+    file: '<path d="M10 5h10l5 5v19H10z"/><path d="M20 5v5h5"/><path d="M13.5 17h8M13.5 22h8"/>',
+    globe: '<circle cx="17" cy="17" r="11"/><ellipse cx="17" cy="17" rx="4.5" ry="11"/><path d="M6 17h22"/>',
+    terminal: '<rect x="5" y="7" width="24" height="20"/><path d="M10 13l4 4-4 4M17 21h6"/>',
+    chip: '<rect x="9" y="9" width="16" height="16"/><path d="M13 5v4M17 5v4M21 5v4M13 25v4M17 25v4M21 25v4M5 13h4M5 17h4M5 21h4M25 13h4M25 17h4M25 21h4"/>',
     gear: '<circle cx="17" cy="17" r="4"/><path d="M17 6v4M17 24v4M6 17h4M24 17h4M9.2 9.2l2.8 2.8M22 22l2.8 2.8M9.2 24.8l2.8-2.8M22 12l2.8-2.8"/>',
   }
 
