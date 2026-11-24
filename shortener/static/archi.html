@@ -61,31 +61,43 @@ button {
 button:hover { background: var(--bg); }
 button:focus-visible { outline: 2px solid var(--packet); outline-offset: 2px; }
 button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
-.tabs button small { font: 400 0.72rem var(--mono); opacity: 0.75; margin-left: 6px; }
-.ctl button { display: inline-flex; align-items: center; padding: 8px 10px; }
-#af-vars::before { content: attr(data-label); align-self: center; font-size: 0.8rem; color: var(--muted); margin-right: 2px; }
-#af-vars button { padding: 5px 10px; font-size: 0.8rem; border-style: dashed; }
+.ctl button { display: inline-flex; align-items: center; justify-content: center; min-width: 38px; padding: 8px 10px; }
+/* The view switch (prod, localhost) is a small joined pair, so it does not read as one more journey tab. */
+#af-views { gap: 0; }
+#af-views button { font: 600 0.74rem var(--mono); padding: 8px 9px; }
+#af-views button + button { border-left: 0; }
+/* Each view's journey tabs share one grid cell, the same way the outcome pickers do. */
+#af-tabs { display: grid; }
+#af-tabs .tg { grid-area: 1 / 1; display: flex; gap: 6px; }
+#af-tabs .tg.off { visibility: hidden; }
+.tabs button { white-space: nowrap; }
+/* All outcome pickers share one grid cell. Only the active journey's is visible, the rest keep their width. */
+#af-vars { display: grid; grid-template-columns: auto auto; align-items: center; gap: 6px; }
+#af-vars::before { content: attr(data-label); font-size: 0.8rem; color: var(--muted); }
+#af-vars .vg { grid-area: 1 / 2; display: flex; gap: 6px; }
+#af-vars .vg.off, #af-vars.empty { visibility: hidden; }
+#af-vars button { padding: 5px 10px; font-size: 0.8rem; border-style: dashed; white-space: nowrap; }
 #af-vars button[aria-pressed="true"] { border-style: solid; }
 
 figure { position: relative; margin: 0; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
-/* The bottom padding is a fixed band for the snackbar. It is in px, not in drawing units,
-   so the snackbar never covers a node however short the window is. */
+/* The bottom padding is a band for the snackbar, in px, so the snackbar never covers a node.
+   render.js sets it to the height of the tallest step text; 70px is only the value before that runs. */
 .frame {
   flex: 1; min-height: 0; overflow-x: auto; border: 1.5px solid var(--ink);
-  box-sizing: border-box; padding-bottom: 104px;
+  box-sizing: border-box; padding-bottom: 70px;
   background: radial-gradient(circle, var(--grid) 1px, transparent 1px) 0 0 / 16px 16px, var(--panel);
 }
 .frame svg { display: block; width: 100%; height: 100%; }
 @media (max-width: 700px) { .frame svg { min-width: 860px; } }
 figcaption {
-  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
-  width: max-content; max-width: min(760px, calc(100% - 28px)); box-sizing: border-box;
-  background: var(--ink); color: var(--bg); box-shadow: 4px 4px 0 var(--packet);
-  padding: 10px 16px; display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; align-items: baseline;
+  position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+  width: max-content; max-width: min(900px, calc(100% - 24px)); box-sizing: border-box;
+  background: var(--ink); color: var(--bg); box-shadow: 3px 3px 0 var(--packet);
+  padding: 6px 12px; display: grid; grid-template-columns: auto 1fr; gap: 0 10px; align-items: baseline;
 }
-figcaption .n { font: 700 1rem var(--display); font-variant-numeric: tabular-nums; }
-figcaption .t { font-size: 0.95rem; line-height: 1.5; min-width: 0; }
-figcaption .src { grid-column: 2; font: 400 0.72rem var(--mono); opacity: 0.7; overflow-wrap: anywhere; }
+figcaption .n { font: 700 0.8rem var(--display); font-variant-numeric: tabular-nums; }
+figcaption .t { font-size: 0.8rem; line-height: 1.45; min-width: 0; }
+figcaption .src { grid-column: 2; font: 400 0.64rem var(--mono); opacity: 0.7; overflow-wrap: anywhere; }
 code { font: 0.9em var(--mono); }
 
 /* nodes */
@@ -94,7 +106,9 @@ code { font: 0.9em var(--mono); }
 .node .sub, .node .route { font: 400 10.5px var(--mono); fill: var(--muted); }
 .node .ico { stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .slot { fill: var(--bg); stroke: var(--rule); stroke-width: 1; }
-.slot.on { stroke: var(--packet); stroke-width: 2; }
+.slot.on { stroke: var(--packet); stroke-width: 2; cursor: help; }
+/* the path the dot follows for a step inside a node: along the bottom edge of the row, never drawn */
+.inner { fill: none; stroke: none; }
 .slotT { font: 400 10.5px var(--mono); fill: var(--ink); }
 .node, .edge { transition: opacity 0.25s; }
 .dim { opacity: 0.28; }
@@ -134,11 +148,18 @@ code { font: 0.9em var(--mono); }
 #af-pop .js { color: var(--j-str); }
 #af-pop .jn { color: var(--tick); }
 #af-pop .jw { color: var(--j-word); }
+#af-pop .raw { color: var(--ink); }
+#af-pop .jc { color: var(--muted); font-style: italic; }
 
-.legend { display: flex; flex-wrap: wrap; gap: 4px 20px; font-size: 0.78rem; color: var(--muted); }
-.legend span { display: inline-flex; align-items: center; gap: 7px; }
-.legend svg { flex: none; }
-.legend .dot { fill: var(--packet); }
+/* The legend opens from the ? button and floats over the top right of the drawing, so it takes no row of its own. */
+#af-legend {
+  position: absolute; z-index: 4; top: 10px; right: 10px; box-sizing: border-box; max-width: min(430px, calc(100% - 20px));
+  display: grid; gap: 6px; padding: 10px 12px; font-size: 0.78rem; line-height: 1.4; color: var(--ink);
+  background: var(--panel); border: 1.5px solid var(--ink); box-shadow: 4px 4px 0 var(--rule);
+}
+#af-legend span { display: grid; grid-template-columns: 46px 1fr; align-items: center; gap: 10px; }
+#af-legend svg { justify-self: center; }
+#af-legend .dot { fill: var(--packet); }
 
 @media (prefers-reduced-motion: reduce) {
   .edge.stream path, .edge.tick path { animation: none; }
@@ -169,7 +190,7 @@ code { font: 0.9em var(--mono); }
 
   const UI = {
     en: {
-      auto: 'Auto-play', prev: 'Previous step (left arrow key)', next: 'Next step (right arrow key)', outcome: 'This time',
+      auto: 'Auto-play', prev: 'Previous step (left arrow key)', next: 'Next step (right arrow key)', outcome: 'This time', legend: 'What the lines and outlines mean',
       sample: 'Sample data. Field names and commands come from the code. The values are made up.',
       now: 'The current step. Hover it, or the thick line, to see sample data.',
       line: {
@@ -180,7 +201,7 @@ code { font: 0.9em var(--mono); }
       shape: { pill: 'person or browser', rect: 'service that takes requests', cyl: 'data store', pipe: 'queue', hex: 'background worker' },
     },
     zh: {
-      auto: '自動播放', prev: '上一步（鍵盤左鍵）', next: '下一步（鍵盤右鍵）', outcome: '這次',
+      auto: '自動播放', prev: '上一步（鍵盤左鍵）', next: '下一步（鍵盤右鍵）', outcome: '這次', legend: '線跟外框各代表什麼',
       sample: '示範資料。欄位名跟指令來自 code，值是編的',
       now: '現在這一步。滑到它或變粗的那條線上會顯示示範資料',
       line: {
@@ -229,30 +250,43 @@ code { font: 0.9em var(--mono); }
 
   function mount(root, data, icons) {
     icons = icons || {}
-    const NODES = data.nodes, EDGES = data.edges, JOURNEYS = data.journeys
+    // A page holds one or more views of the same system (prod, localhost). Each view is a full drawing:
+    // its own nodes, edges and journeys. A data file without `views` is one view.
+    const VIEWS = data.views || [data]
+    let vw = 0, NODES, EDGES, JOURNEYS, INNER
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     // English first. z switches to Chinese and back; nothing on the page says so and the choice is not remembered.
     let lang = 'en', ji = 0, si = 0, vi = null, playing = !reduced, token = 0, pending = false
     const tx = (v) => (v == null ? '' : typeof v === 'string' ? v : v[lang] != null ? v[lang] : v.en)
-    const [W, H] = data.viewBox
+    // A step can also happen inside one node: 'fn#mem' is row `mem` of node `fn`. The dot slides along that row.
+    const R = (id) => EDGES[id] || INNER[id]
 
-    root.innerHTML = `<div class="bar"><div class="left">`
+    root.innerHTML = `<div class="bar"><div class="left"><div class="tabs" id="af-views" role="group"></div>`
       + `<div class="tabs" id="af-tabs" role="group"></div><div class="tabs" id="af-vars" role="group"></div></div>`
-      + `<div class="ctl"><button id="af-auto" type="button">${BTN.auto}</button>`
+      + `<div class="ctl"><button id="af-help" type="button" aria-pressed="false">?</button><button id="af-auto" type="button">${BTN.auto}</button>`
       + `<button id="af-prev" type="button">${BTN.prev}</button><button id="af-next" type="button">${BTN.next}</button></div></div>`
-      + `<figure><div class="frame"><svg id="af-svg" viewBox="0 0 ${W} ${H}" role="img"></svg></div>`
+      + `<figure><div class="frame" id="af-frame"><svg id="af-svg" role="img"></svg></div>`
       + `<figcaption id="af-cap"><span class="n"></span><span class="t"></span><span class="src"></span></figcaption>`
-      + `<div id="af-pop" hidden><div class="hd"></div><pre></pre></div></figure>`
-      + `<div class="legend" id="af-legend"></div>`
+      + `<div id="af-pop" hidden><div class="hd"></div><pre></pre></div>`
+      + `<div id="af-legend" hidden></div></figure>`
     const $ = (id) => document.getElementById('af-' + id)
     const svg = $('svg'), tabs = $('tabs'), vars = $('vars'), cap = $('cap'), pop = $('pop'), fig = pop.parentElement
 
-    // one colour token per node that names a hue: [light, dark]
-    const hued = Object.keys(NODES).filter((id) => NODES[id].hue)
-    const hueCss = (sel, i) => `${sel}{${hued.map((id) => `--n-${id}:${NODES[id].hue[i]}`).join(';')}}`
     const st = document.createElement('style')
-    st.textContent = hueCss(':root', 0) + `@media (prefers-color-scheme: dark){${hueCss(':root:not([data-theme="light"])', 1)}}` + hueCss(':root[data-theme="dark"]', 1)
     document.head.appendChild(st)
+    function useView(k) {
+      vw = k
+      const v = VIEWS[k]
+      NODES = v.nodes; EDGES = v.edges; JOURNEYS = v.journeys
+      INNER = {}
+      for (const [nid, n] of Object.entries(NODES)) for (const s of n.slots || []) INNER[nid + '#' + s.id] = { a: nid, b: nid, slot: s.id }
+      svg.setAttribute('viewBox', `0 0 ${v.viewBox[0]} ${v.viewBox[1]}`)
+      // one colour token per node that names a hue: [light, dark]
+      const hued = Object.keys(NODES).filter((id) => NODES[id].hue)
+      const hueCss = (sel, i) => `${sel}{${hued.map((id) => `--n-${id}:${NODES[id].hue[i]}`).join(';')}}`
+      st.textContent = hueCss(':root', 0) + `@media (prefers-color-scheme: dark){${hueCss(':root:not([data-theme="light"])', 1)}}` + hueCss(':root[data-theme="dark"]', 1)
+      ji = 0; si = 0; vi = null
+    }
 
     function glyph(name, hue, x, y, S) {
       const ic = icons[name]
@@ -268,7 +302,8 @@ code { font: 0.9em var(--mono); }
         + `<text class="ttl" x="${ix + S + 8}" y="${iy + 19}">${esc(tx(n.t))}</text>`
         + `<text class="sub" x="${ix + S + 8}" y="${iy + 36}">${esc(tx(n.s))}</text>`
         + (n.routes || []).map((r, i) => `<text class="route" x="${n.x + 14}" y="${n.y + 96 + i * 17}">${esc(r)}</text>`).join('')
-        + (n.slots || []).map((s) => `<rect class="slot" data-slot="${s.id}" x="${n.x + 10}" y="${s.y - 11}" width="${n.w - 20}" height="22"/>`
+        + (n.slots || []).map((s) => `<rect class="slot" data-node="${id}" data-slot="${s.id}" x="${n.x + 10}" y="${s.y - 11}" width="${n.w - 20}" height="22"/>`
+          + `<path class="inner" id="af-p-${id}#${s.id}" d="M${n.x + 16} ${s.y + 11}H${n.x + n.w - 16}"/>`
           + `<text class="slotT" x="${n.x + 18}" y="${s.y + 4}">${esc(s.t)}</text>`).join('')
         + `</g>`
     }
@@ -287,9 +322,18 @@ code { font: 0.9em var(--mono); }
       $('auto').title = u.auto; $('auto').setAttribute('aria-label', u.auto)
       $('prev').title = u.prev; $('prev').setAttribute('aria-label', u.prev)
       $('next').title = u.next; $('next').setAttribute('aria-label', u.next)
+      $('help').title = u.legend; $('help').setAttribute('aria-label', u.legend)
       vars.dataset.label = u.outcome
       pop.querySelector('.hd').textContent = u.sample
-      tabs.innerHTML = JOURNEYS.map((j, i) => `<button type="button" id="af-tab-${j.id}" data-j="${i}">${esc(tx(j.name))}<small>${esc(j.route || '')}</small></button>`).join('')
+      $('views').hidden = VIEWS.length < 2
+      $('views').innerHTML = VIEWS.map((v, k) => `<button type="button" id="af-view-${v.id}" data-k="${k}" aria-pressed="${k === vw}">${esc(tx(v.name))}</button>`).join('')
+      // Every view's tabs, and every journey's outcome picker, sit in one grid cell each with only the active
+      // group visible. The bar is then equally wide whatever is open, so switching never moves the drawing.
+      tabs.innerHTML = VIEWS.map((v, k) => `<div class="tg" data-k="${k}">`
+        + v.journeys.map((j, i) => `<button type="button" id="af-tab-${v.id || k}-${j.id}" data-j="${i}" title="${esc(j.route || '')}">${esc(tx(j.name))}</button>`).join('') + `</div>`).join('')
+      vars.hidden = !VIEWS.some((v) => v.journeys.some((j) => j.variants))
+      vars.innerHTML = VIEWS.map((v, k) => v.journeys.map((j, i) => !j.variants ? '' : `<div class="vg" data-k="${k}" data-j="${i}">`
+        + j.variants.map((o) => `<button type="button" id="af-var-${v.id || k}-${j.id}-${o.id}" data-v="${o.id}">${esc(tx(o.name))}</button>`).join('') + `</div>`).join('')).join('')
 
       const kinds = [...new Set(Object.values(EDGES).map((e) => e.kind))], shapes = [...new Set(Object.values(NODES).map((n) => n.shape || 'rect'))]
       const line = (k) => `<span><svg width="46" height="12" viewBox="0 0 46 12" aria-hidden="true"><g class="edge ${k}"><path d="M1 6H36"/><polygon points="45,6 35,1.5 35,10.5"/></g></svg>${u.line[k]}</span>`
@@ -307,20 +351,45 @@ code { font: 0.9em var(--mono); }
       const j = JOURNEYS[ji]
       if (j.variants && !j.variants.some((v) => v.id === vi)) vi = j.start || j.variants[0].id
       const used = new Set(cur().flatMap((s) => s.e.map((x) => x[0])))
-      const usedN = new Set([...used].flatMap((id) => [EDGES[id].a, EDGES[id].b]))
+      const usedN = new Set([...used].flatMap((id) => [R(id).a, R(id).b]))
       svg.querySelectorAll('.edge').forEach((g) => g.classList.toggle('dim', !used.has(g.dataset.e)))
       svg.querySelectorAll('.node').forEach((g) => g.classList.toggle('dim', !usedN.has(g.dataset.n)))
-      tabs.querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-pressed', i === ji))
-      vars.hidden = !j.variants
-      vars.innerHTML = (j.variants || []).map((v) => `<button type="button" id="af-var-${v.id}" data-v="${v.id}" aria-pressed="${v.id === vi}">${esc(tx(v.name))}</button>`).join('')
+      tabs.querySelectorAll('.tg').forEach((g) => {
+        const mine = +g.dataset.k === vw
+        g.classList.toggle('off', !mine)
+        g.querySelectorAll('button').forEach((b) => { b.setAttribute('aria-pressed', mine && +b.dataset.j === ji); b.tabIndex = mine ? 0 : -1 })
+      })
+      vars.classList.toggle('empty', !j.variants)
+      vars.querySelectorAll('.vg').forEach((g) => {
+        const mine = +g.dataset.k === vw && +g.dataset.j === ji
+        g.classList.toggle('off', !mine)
+        g.querySelectorAll('button').forEach((b) => { b.setAttribute('aria-pressed', mine && b.dataset.v === vi); b.tabIndex = mine ? 0 : -1 })
+      })
+    }
+    // The band under the drawing is as tall as the tallest step text at this width, and stays that tall.
+    // A band that followed each step would resize the drawing on every step.
+    function fitBand() {
+      const n = cap.querySelector('.n'), t = cap.querySelector('.t'), s = cap.querySelector('.src')
+      const keep = [n.textContent, t.innerHTML, s.textContent]
+      let max = 0
+      n.textContent = '00 / 00'
+      for (const v of VIEWS) for (const j of v.journeys) for (const stp of j.steps) {
+        t.innerHTML = tx(stp.t); s.textContent = stp.src
+        max = Math.max(max, cap.offsetHeight)
+      }
+      n.textContent = keep[0]; t.innerHTML = keep[1]; s.textContent = keep[2]
+      $('frame').style.paddingBottom = max + 24 + 'px'
     }
     function paintStep() {
       const steps = cur(), s = steps[si]
       const on = new Set(s.e.map((x) => x[0]))
-      const onN = new Set([...on].flatMap((id) => [EDGES[id].a, EDGES[id].b]))
+      const onN = new Set([...on].flatMap((id) => [R(id).a, R(id).b]))
       svg.querySelectorAll('.edge').forEach((g) => g.classList.toggle('on', on.has(g.dataset.e)))
       svg.querySelectorAll('.node').forEach((g) => g.classList.toggle('on', onN.has(g.dataset.n)))
-      svg.querySelectorAll('.slot').forEach((r) => r.classList.toggle('on', [...on].some((id) => EDGES[id].slot === r.dataset.slot)))
+      svg.querySelectorAll('.slot').forEach((r) => r.classList.toggle('on', [...on].some((id) => {
+        const e = R(id)
+        return e.slot === r.dataset.slot && (e.a === r.dataset.node || e.b === r.dataset.node)
+      })))
       cap.querySelector('.n').textContent = `${si + 1} / ${steps.length}`
       cap.querySelector('.t').innerHTML = tx(s.t)
       cap.querySelector('.src').textContent = s.src
@@ -328,6 +397,10 @@ code { font: 0.9em var(--mono); }
 
     // colour by token type: key, string, number, true/false/null
     function paintJSON(v) {
+      // A string is something that was never JSON, such as a shell command. Show it as written; only the flags get colour.
+      if (typeof v === 'string') {
+        return '<span class="raw">' + esc(v).replace(/(^|\s)(--[\w-]+)/g, '$1<span class="jk">$2</span>').replace(/(^|\n)(#[^\n]*)/g, '$1<span class="jc">$2</span>') + '</span>'
+      }
       return esc(JSON.stringify(v, null, 2)).replace(/("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?/g, (m, str, colon, word) => {
         if (str) return colon ? `<span class="jk">${str}</span>${colon}` : `<span class="js">${str}</span>`
         return `<span class="${word ? 'jw' : 'jn'}">${m}</span>`
@@ -341,7 +414,7 @@ code { font: 0.9em var(--mono); }
     }
     function hover(ev) {
       const t = ev.target
-      if (!(t.closest && (t.closest('.edge.on') || t.id === 'af-packet' || t.id === 'af-halo'))) return hidePop()
+      if (!(t.closest && (t.closest('.edge.on') || t.closest('.slot.on') || t.id === 'af-packet' || t.id === 'af-halo'))) return hidePop()
       pop.querySelector('pre').innerHTML = paintJSON(cur()[si].d)
       pop.hidden = false
       const r = fig.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight
@@ -394,6 +467,10 @@ code { font: 0.9em var(--mono); }
       $('auto').setAttribute('aria-pressed', playing)
     }
 
+    $('views').addEventListener('click', (ev) => {
+      const b = ev.target.closest('button'); if (!b) return
+      useView(+b.dataset.k); draw(); paintJourney(); runStep()
+    })
     tabs.addEventListener('click', (ev) => {
       const b = ev.target.closest('button'); if (!b) return
       ji = +b.dataset.j; si = 0; paintJourney(); runStep()
@@ -406,6 +483,13 @@ code { font: 0.9em var(--mono); }
     $('prev').addEventListener('click', () => advance(-1))
     $('next').addEventListener('click', () => advance(1))
     $('auto').addEventListener('click', () => { setPlaying(!playing); if (playing) runStep() })
+    $('help').addEventListener('click', () => {
+      const lg = $('legend')
+      lg.hidden = !lg.hidden
+      $('help').setAttribute('aria-pressed', !lg.hidden)
+    })
+    let raf = 0
+    window.addEventListener('resize', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(fitBand) })
     svg.addEventListener('pointermove', hover)
     svg.addEventListener('pointerdown', hover)
     svg.addEventListener('pointerleave', hidePop)
@@ -418,14 +502,18 @@ code { font: 0.9em var(--mono); }
       if (ev.key === 'z' || ev.key === 'Z') {
         lang = lang === 'en' ? 'zh' : 'en'
         document.documentElement.lang = lang === 'zh' ? 'zh-Hant' : 'en'
-        draw(); paintJourney(); runStep()
+        draw(); paintJourney(); fitBand(); runStep()
       }
     })
 
     document.documentElement.lang = 'en'
+    useView(0)
     draw()
     setPlaying(playing)
     paintJourney()
+    fitBand()
+    // the web fonts are narrower than the fallback, so measure again once they are in
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitBand)
     runStep()
   }
 
